@@ -1,0 +1,1326 @@
+{
+  "sales": [
+    {
+      "id": 1005,
+      "customerId": "ml5vhnreyta09",
+      "customer": {
+        "firstName": "VIVIANA FRANCISCA",
+        "lastName": "PACHECO CAPA",
+        "fullName": "PACHECO CAPA VIVIANA FRANCISCA",
+        "email": "sebastianavila19@gmail.com",
+        "idNumber": "0123456789",
+        "phone": "1234567970",
+        "country": "Ecuador",
+        "province": "Cañar",
+        "city": "azogues",
+        "postalCode": "123215"
+      },
+      "tickets": [
+        "5084"
+      ],
+      "total": 1,
+      "date": "2026-02-03T02:38:05.326Z"
+    },
+    {
+      "id": 1004,
+      "customerId": "ml5vhnreyta09",
+      "customer": {
+        "firstName": "VIVIANA FRANCISCA",
+        "lastName": "PACHECO CAPA",
+        "fullName": "PACHECO CAPA VIVIANA FRANCISCA",
+        "email": "sebastianavila19@gmail.com",
+        "idNumber": "0123456789",
+        "phone": "1234567970",
+        "country": "Ecuador",
+        "province": "Cañar",
+        "city": "azogues",
+        "postalCode": "123215"
+      },
+      "tickets": [
+        "3338",
+        "9334",
+        "8235",
+        "1508",
+        "3963"
+      ],
+      "total": 5,
+      "date": "2026-02-03T00:41:02.090Z"
+    },
+    {
+      "id": 1003,
+      "customerId": "ml4l5h2isovzh",
+      "customer": {
+        "firstName": "VIVI",
+        "lastName": "AVI",
+        "fullName": "AVI VIVI",
+        "email": "sebastianavila19@yahoo.com",
+        "idNumber": "1234567890",
+        "phone": "0983440106",
+        "country": "Ecuador",
+        "province": "Cañar",
+        "city": "AZOGUES",
+        "postalCode": "102"
+      },
+      "tickets": [
+        "9478",
+        "9601",
+        "4226",
+        "7506",
+        "2342",
+        "5824",
+        "3990",
+        "9340",
+        "6983",
+        "1716",
+        "3151",
+        "8632",
+        "6700",
+        "2230",
+        "4083",
+        "9384",
+        "9591",
+        "3972",
+        "1404",
+        "2407",
+        "4553",
+        "7502",
+        "9339",
+        "2882",
+        "0561",
+        "8267",
+        "4027",
+        "5042",
+        "2566",
+        "6058",
+        "0618",
+        "1534",
+        "4909",
+        "8066",
+        "2856",
+        "1730",
+        "4675",
+        "9080",
+        "8661",
+        "7311",
+        "9969",
+        "0750",
+        "0860",
+        "5903",
+        "4871",
+        "9229",
+        "5782",
+        "9697",
+        "4220",
+        "3227",
+        "5958",
+        "8852",
+        "5416",
+        "3761",
+        "8791",
+        "6795",
+        "3293",
+        "3268",
+        "8418",
+        "2961",
+        "2467",
+        "1865",
+        "9027",
+        "5046",
+        "7621",
+        "0412",
+        "7272",
+        "5126",
+        "3620",
+        "3661",
+        "7445",
+        "3810",
+        "3637",
+        "8002",
+        "6761",
+        "7213",
+        "0298",
+        "1249",
+        "4926",
+        "2907",
+        "3643",
+        "7583",
+        "4356",
+        "3461",
+        "4948",
+        "8216",
+        "4371",
+        "0619",
+        "8505",
+        "8030",
+        "2541",
+        "5808",
+        "1917",
+        "3262",
+        "7052",
+        "2701",
+        "4343",
+        "5118",
+        "3066",
+        "2252",
+        "4751"
+      ],
+      "total": 101,
+      "date": "2026-02-02T02:50:24.461Z"
+    },
+    {
+      "id": 1002,
+      "customerId": "ml4l5h2h4etrm",
+      "customer": {
+        "firstName": "SEBASTIAN VICENTE",
+        "lastName": "AVILA QUINCHE ",
+        "fullName": "AVILA QUINCHE  SEBASTIAN VICENTE",
+        "email": "sebastianavila19@yahoo.com",
+        "idNumber": "0302302609",
+        "phone": "0983440106",
+        "country": "Ecuador",
+        "province": "Cañar",
+        "city": "AZOGUES",
+        "postalCode": "102"
+      },
+      "tickets": [
+        "3812",
+        "0296",
+        "0514",
+        "0232",
+        "7223"
+      ],
+      "total": 5,
+      "date": "2026-02-02T02:47:50.643Z"
+    },
+    {
+      "id": 1001,
+      "customerId": "ml4l5h2h4etrm",
+      "customer": {
+        "firstName": "SEBASTIAN",
+        "lastName": "AVILA QUINCHE",
+        "fullName": "AVILA QUINCHE SEBASTIAN",
+        "email": "sebastianavila19@yahoo.com",
+        "idNumber": "0302302609",
+        "phone": "0983440106",
+        "country": "Ecuador",
+        "province": "Cañar",
+        "city": "AZOGUES",
+        "postalCode": "102"
+      },
+      "tickets": [
+        "5495",
+        "5502",
+        "6084",
+        "0897",
+        "8434",
+        "9689",
+        "4497",
+        "4896",
+        "6024",
+        "0406",
+        "2917",
+        "4809",
+        "9211",
+        "7614",
+        "3627",
+        "2829"
+      ],
+      "total": 16,
+      "date": "2026-02-02T02:44:57.315Z"
+    }
+  ],
+  "tickets": {
+    "1249": {
+      "number": "1249",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1404": {
+      "number": "1404",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1508": {
+      "number": "1508",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T00:40:40.339Z",
+      "session_id": "222ff32e-4042-43fb-9755-03c194e70219",
+      "sale_id": 1004
+    },
+    "1534": {
+      "number": "1534",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1716": {
+      "number": "1716",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1730": {
+      "number": "1730",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1865": {
+      "number": "1865",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "1917": {
+      "number": "1917",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2230": {
+      "number": "2230",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2252": {
+      "number": "2252",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2342": {
+      "number": "2342",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2407": {
+      "number": "2407",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2467": {
+      "number": "2467",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2541": {
+      "number": "2541",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2566": {
+      "number": "2566",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2701": {
+      "number": "2701",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2829": {
+      "number": "2829",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "2856": {
+      "number": "2856",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2882": {
+      "number": "2882",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2907": {
+      "number": "2907",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "2917": {
+      "number": "2917",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "2961": {
+      "number": "2961",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3066": {
+      "number": "3066",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3151": {
+      "number": "3151",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3227": {
+      "number": "3227",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3262": {
+      "number": "3262",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3268": {
+      "number": "3268",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3293": {
+      "number": "3293",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3338": {
+      "number": "3338",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T00:40:40.339Z",
+      "session_id": "222ff32e-4042-43fb-9755-03c194e70219",
+      "sale_id": 1004
+    },
+    "3461": {
+      "number": "3461",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3620": {
+      "number": "3620",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3627": {
+      "number": "3627",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "3637": {
+      "number": "3637",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3643": {
+      "number": "3643",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3661": {
+      "number": "3661",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3761": {
+      "number": "3761",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3810": {
+      "number": "3810",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3812": {
+      "number": "3812",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:47:35.467Z",
+      "session_id": "8f3a6038-a576-4417-88e6-ce0935d152f8",
+      "sale_id": 1002
+    },
+    "3963": {
+      "number": "3963",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T00:40:40.339Z",
+      "session_id": "222ff32e-4042-43fb-9755-03c194e70219",
+      "sale_id": 1004
+    },
+    "3972": {
+      "number": "3972",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "3990": {
+      "number": "3990",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4027": {
+      "number": "4027",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4083": {
+      "number": "4083",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4220": {
+      "number": "4220",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4226": {
+      "number": "4226",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4343": {
+      "number": "4343",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4356": {
+      "number": "4356",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4371": {
+      "number": "4371",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4497": {
+      "number": "4497",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "4553": {
+      "number": "4553",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4675": {
+      "number": "4675",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4751": {
+      "number": "4751",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4809": {
+      "number": "4809",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "4871": {
+      "number": "4871",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4896": {
+      "number": "4896",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "4909": {
+      "number": "4909",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4926": {
+      "number": "4926",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "4948": {
+      "number": "4948",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5042": {
+      "number": "5042",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5046": {
+      "number": "5046",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5084": {
+      "number": "5084",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T02:37:49.265Z",
+      "session_id": "dafa177b-2253-45ea-9902-5d451f446c5b",
+      "sale_id": 1005
+    },
+    "5118": {
+      "number": "5118",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5126": {
+      "number": "5126",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5416": {
+      "number": "5416",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5495": {
+      "number": "5495",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "5502": {
+      "number": "5502",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "5782": {
+      "number": "5782",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5808": {
+      "number": "5808",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5824": {
+      "number": "5824",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5903": {
+      "number": "5903",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "5958": {
+      "number": "5958",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "6024": {
+      "number": "6024",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "6058": {
+      "number": "6058",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "6084": {
+      "number": "6084",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "6700": {
+      "number": "6700",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "6761": {
+      "number": "6761",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "6795": {
+      "number": "6795",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "6983": {
+      "number": "6983",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7052": {
+      "number": "7052",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.577Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7213": {
+      "number": "7213",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7223": {
+      "number": "7223",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:47:35.467Z",
+      "session_id": "8f3a6038-a576-4417-88e6-ce0935d152f8",
+      "sale_id": 1002
+    },
+    "7272": {
+      "number": "7272",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7311": {
+      "number": "7311",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7445": {
+      "number": "7445",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7502": {
+      "number": "7502",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7506": {
+      "number": "7506",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7583": {
+      "number": "7583",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "7614": {
+      "number": "7614",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "7621": {
+      "number": "7621",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8002": {
+      "number": "8002",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8030": {
+      "number": "8030",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8066": {
+      "number": "8066",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8216": {
+      "number": "8216",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8235": {
+      "number": "8235",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T00:40:40.339Z",
+      "session_id": "222ff32e-4042-43fb-9755-03c194e70219",
+      "sale_id": 1004
+    },
+    "8267": {
+      "number": "8267",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8418": {
+      "number": "8418",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8434": {
+      "number": "8434",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "8505": {
+      "number": "8505",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8632": {
+      "number": "8632",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8661": {
+      "number": "8661",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8791": {
+      "number": "8791",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "8852": {
+      "number": "8852",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9027": {
+      "number": "9027",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9080": {
+      "number": "9080",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9211": {
+      "number": "9211",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "9229": {
+      "number": "9229",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9334": {
+      "number": "9334",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-03T00:40:40.339Z",
+      "session_id": "222ff32e-4042-43fb-9755-03c194e70219",
+      "sale_id": 1004
+    },
+    "9339": {
+      "number": "9339",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9340": {
+      "number": "9340",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9384": {
+      "number": "9384",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9478": {
+      "number": "9478",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9591": {
+      "number": "9591",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9601": {
+      "number": "9601",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9689": {
+      "number": "9689",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "9697": {
+      "number": "9697",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "9969": {
+      "number": "9969",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0897": {
+      "number": "0897",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "0406": {
+      "number": "0406",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:44:43.088Z",
+      "session_id": "a9c46222-a2e0-4c23-885f-95f110fcb5f9",
+      "sale_id": 1001
+    },
+    "0296": {
+      "number": "0296",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:47:35.467Z",
+      "session_id": "8f3a6038-a576-4417-88e6-ce0935d152f8",
+      "sale_id": 1002
+    },
+    "0514": {
+      "number": "0514",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:47:35.467Z",
+      "session_id": "8f3a6038-a576-4417-88e6-ce0935d152f8",
+      "sale_id": 1002
+    },
+    "0232": {
+      "number": "0232",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:47:35.467Z",
+      "session_id": "8f3a6038-a576-4417-88e6-ce0935d152f8",
+      "sale_id": 1002
+    },
+    "0561": {
+      "number": "0561",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0618": {
+      "number": "0618",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0750": {
+      "number": "0750",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0860": {
+      "number": "0860",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0412": {
+      "number": "0412",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0298": {
+      "number": "0298",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    },
+    "0619": {
+      "number": "0619",
+      "raffle_id": 1,
+      "status": "paid",
+      "reserved_at": "2026-02-02T02:50:12.576Z",
+      "session_id": "9c18cdcb-d56d-43ef-92b9-8352df94b4ed",
+      "sale_id": 1003
+    }
+  },
+  "settings": {
+    "raffleTitle": "Dinámica #1",
+    "ticketPrice": 1,
+    "prizes": [
+      {
+        "title": "Primer Premio",
+        "amount": "$3.000"
+      },
+      {
+        "title": "Segundo Premio",
+        "amount": "$1.000"
+      },
+      {
+        "title": "Tercer Premio",
+        "amount": "$500"
+      }
+    ],
+    "contactEmail": "soporteyvossoee@gmail.com",
+    "privacyHtml": "POLÍTICA DE PRIVACIDAD – Y Voss Oeee (Dinámica)\n\nFecha de actualización: 02/02/2026\n\nEsta Política de Privacidad describe cómo Y Voss Oeee recopila, utiliza, almacena, protege y gestiona los datos personales de los usuarios que visitan nuestra plataforma y/o participan en nuestras dinámicas. Al utilizar el sitio web, registrarse o participar en una dinámica, el usuario declara que ha leído, entendido y aceptado esta Política de Privacidad, así como los Términos y Condiciones aplicables.\n\n1. Responsable del tratamiento\n\nResponsable: Y Voss Oeee\nCorreo de contacto (privacidad y soporte): soporteyvossoee@gmail.com\n\n2. Alcance de esta política\n\nEsta política aplica a:\n\nUsuarios que visitan el sitio web de la dinámica.\n\nUsuarios que completan formularios de registro o compra.\n\nParticipantes, compradores y personas que intervengan en procesos de validación.\n\nComunicaciones relacionadas con confirmaciones, soporte, verificación y premiación.\n\nOperaciones técnicas necesarias para la seguridad y funcionamiento del sistema.\n\n3. Datos personales que recopilamos\n\nPodemos recopilar datos personales en función de la etapa de participación. Solicitamos únicamente información necesaria para operar la dinámica con orden, seguridad y transparencia.\n\n3.1. Datos de identificación y contacto\n\nNombres y apellidos\n\nNúmero de cédula/ID\n\nCorreo electrónico\n\nNúmero de teléfono\n\nPaís, provincia y cantón/ciudad (y otros datos de ubicación si el formulario lo solicita)\n\n3.2. Datos de compra y participación\n\nTicket(s) adquiridos (número(s) asignados por el sistema)\n\nFecha y hora de compra\n\nTotal pagado\n\nEstado de compra (pendiente, confirmada, anulada, etc.)\n\nIdentificador interno de la transacción/venta (si aplica)\n\nInformación técnica mínima asociada a seguridad (por ejemplo, registros del sistema para detectar fraude o intentos sospechosos)\n\n3.3. Datos del proceso de validación de premiación (solo si corresponde)\n\nEn caso de resultar ganador o cuando sea necesario verificar identidad por seguridad, se podrá solicitar:\n\nVerificación de identidad (por ejemplo, foto/imagen del documento para confirmar titularidad)\n\nConfirmación del ticket ganador (incluida la verificación del correo de confirmación)\n\nEvidencia razonable de aceptación/recepción del premio (por ejemplo, foto o video breve), según Términos y Condiciones\n\nImportante:\nNo solicitamos información financiera sensible por mensajes, chats o redes sociales (por ejemplo: claves, contraseñas, códigos de seguridad o datos completos de tarjeta). Los pagos se gestionan mediante los canales/proveedores definidos para la dinámica.\n\n4. Finalidades del tratamiento (¿para qué usamos tus datos?)\n\nLos datos personales se utilizan para:\n\nProcesar compras y registrar participaciones de forma correcta.\n\nEnviar confirmaciones y notificaciones al correo proporcionado (incluyendo información de compra y tickets asignados).\n\nGarantizar integridad y transparencia, evitando duplicidad de tickets, suplantaciones, intentos de fraude o manipulación del sistema.\n\nEjecutar sorteos y validar resultados conforme a la dinámica.\n\nContactar al ganador y gestionar verificación, coordinación y entrega del premio cuando aplique.\n\nAtender soporte y consultas sobre compras, confirmaciones o incidencias.\n\nMejorar la experiencia y seguridad del sitio, mediante medición agregada de rendimiento y monitoreo técnico (sin buscar identificar a personas más allá de lo necesario).\n\nResguardar evidencia y trazabilidad de operaciones para auditoría interna y prevención de conflictos o reclamos.\n\n5. Base legal / consentimiento\n\nEl tratamiento se fundamenta en:\n\nLa ejecución de la dinámica y los Términos y Condiciones aceptados por el usuario.\n\nEl consentimiento otorgado al proporcionar datos para participar.\n\nEl interés legítimo de proteger la seguridad del sistema, prevenir fraude y mantener trazabilidad.\n\nEl cumplimiento de obligaciones legales cuando corresponda.\n\n6. Compartición de datos con terceros\n\nNo vendemos datos personales ni los compartimos con fines comerciales ajenos a la dinámica.\n\nPodemos compartir información únicamente cuando sea necesario para:\n\nProcesamiento de pagos (pasarelas/proveedores relacionados).\n\nServicios tecnológicos (hosting, servidores, almacenamiento, seguridad, correo, analítica o herramientas que soporten la plataforma).\n\nCumplimiento legal ante autoridad competente cuando exista obligación o requerimiento válido.\n\nEn tales casos, procuramos trabajar con proveedores que mantengan medidas razonables de seguridad y confidencialidad, sin perjuicio de que cada proveedor mantenga sus propias políticas.\n\n7. Publicidad del ganador y datos en transmisiones\n\nLa dinámica puede incluir sorteos o anuncios en vivo, por lo que:\n\nEl usuario acepta que, si resulta ganador, se pueda anunciar públicamente el resultado (por ejemplo: nombre del ganador y número de ticket ganador) con criterios razonables de privacidad.\n\nLa Organización procurará no exponer datos sensibles (como número completo de cédula) durante la transmisión o publicaciones.\n\nSe podrán usar formas parciales o enmascaradas para preservar privacidad cuando corresponda.\n\n8. Seguridad y protección de datos\n\nAplicamos medidas razonables para proteger la información, tales como:\n\nControl de acceso a la administración\n\nValidaciones para evitar duplicidad de tickets y registros inconsistentes\n\nAlmacenamiento seguro en servicios tecnológicos confiables\n\nBuenas prácticas para prevenir accesos no autorizados\n\nEl usuario reconoce que ningún sistema es 100% invulnerable. Aun así, adoptamos medidas para reducir riesgos y responder de forma razonable ante incidentes.\n\n9. Tiempo de conservación (permanente)\n\nLos datos personales y registros de participación podrán ser conservados de manera permanente en nuestros sistemas, principalmente para:\n\nMantener un historial verificable de participaciones, compras y resultados para auditoría, transparencia y prevención de fraude.\n\nAtender reclamos, consultas y verificaciones futuras, incluso tiempo después de concluida la dinámica.\n\nCumplir con obligaciones legales, contables o administrativas cuando corresponda.\n\nProteger la seguridad de la plataforma y conservar evidencia ante incidentes o intentos de fraude.\n\nCuando sea técnicamente posible y legalmente procedente, podremos aplicar medidas de minimización, como restricción de acceso, enmascaramiento parcial o anonimización, manteniendo la información necesaria para los fines descritos.\n\nEl usuario entiende y acepta que la eliminación total de ciertos registros podría no ser posible si su supresión afecta la transparencia, auditoría, prevención de fraude o cumplimiento de obligaciones.\n\n10. Derechos del usuario (acceso, corrección, eliminación)\n\nEl usuario puede solicitar:\n\nAcceso a sus datos personales\n\nCorrección de datos inexactos\n\nEliminación de datos cuando sea procedente y no afecte auditoría, seguridad, prevención de fraude u obligaciones aplicables\n\nPara ejercer estos derechos, escribir a: soporteyvossoee@gmail.com\n\nLa Organización podrá solicitar verificación de identidad antes de procesar solicitudes, como medida de protección.\n\n11. Cookies y analítica (visitas)\n\nLa plataforma puede utilizar cookies o tecnologías similares para:\n\nFunciones básicas del sitio (seguridad, sesión, navegación)\n\nMedición de visitas y rendimiento de forma agregada (por ejemplo, métricas generales de visitas)\n\nEl usuario puede ajustar cookies desde su navegador; algunas funciones podrían verse afectadas si se bloquean.\n\n12. Menores de edad\n\nLa participación está dirigida a personas con capacidad legal para realizar transacciones. Si un menor participa, se entenderá que lo hace con autorización de su representante legal, bajo su exclusiva responsabilidad.\n\n13. Cambios en la política, interpretación y reglas del Organizador\n\nLa Organización puede actualizar esta política cuando:\n\nSea necesario por seguridad, prevención de fraude o mejoras del sistema.\n\nExistan cambios operativos, técnicos o de proveedores.\n\nSe requiera mayor claridad o precisión en las condiciones.\n\nLa versión vigente será la publicada en la plataforma con su fecha de actualización.\n\nRegla de interpretación:\nSi existe ambigüedad, vacíos de información o situaciones no previstas, el usuario acepta que se aplicarán los criterios del Organizador de manera razonable para proteger la integridad, transparencia y seguridad de la dinámica. Estas reglas y decisiones forman parte de las condiciones operativas de la dinámica.\n\n14. Contacto\n\nPara consultas sobre privacidad, soporte o solicitudes relacionadas con datos personales:\n📩 soporteyvossoee@gmail.com",
+    "termsHtml": "TÉRMINOS Y CONDICIONES – Y Voss Oeee (Dinámica)\n\nFecha de actualización: 02/02/2026\nOrganiza: Y Voss Oeee\nContacto: soporteyvossoee@gmail.com\n\nAl acceder, registrarse, comprar tickets o participar en esta dinámica (en adelante, la “Dinámica”), el usuario declara que ha leído, comprendido y aceptado estos Términos y Condiciones (“T&C”). Si no está de acuerdo con los T&C, debe abstenerse de participar.\n\n1. Definiciones\n\nPara efectos de estos T&C:\n\nOrganizador: Y Voss Oeee, responsable de administrar la Dinámica.\n\nUsuario/Participante: Persona que visita la plataforma, se registra o compra tickets.\n\nTicket: Número asignado por el sistema al momento de una compra confirmada.\n\nCompra confirmada: Operación cuyo pago fue aprobado por el proveedor de pagos y validado por el sistema.\n\nPlataforma: Sitio web y herramientas tecnológicas usadas para operar la Dinámica.\n\nSorteo: Evento en el que se selecciona uno o varios tickets ganadores según la mecánica establecida.\n\n2. Naturaleza de la Dinámica\n\nLa Dinámica es una actividad promocional/participativa administrada por el Organizador, en la cual los usuarios adquieren tickets para participar por premios anunciados en canales oficiales. La participación implica aceptación total de estos T&C y de la Política de Privacidad publicada por el Organizador.\n\n3. Requisitos para participar\n\nPara participar, el usuario debe:\n\nSer mayor de edad y contar con capacidad legal para realizar transacciones, o participar con autorización y responsabilidad de su representante legal cuando aplique.\n\nProporcionar datos reales, completos y verificables (nombre, cédula/ID, correo, teléfono y otros campos requeridos).\n\nUtilizar medios de pago habilitados en la plataforma y completar el proceso de compra conforme a lo solicitado.\n\nEl Organizador se reserva el derecho de rechazar, anular o bloquear participaciones cuando identifique indicios razonables de fraude, suplantación, datos falsos o uso indebido del sistema.\n\n4. Registro de datos y responsabilidad del usuario\n\nEl usuario es responsable de:\n\nIngresar su información correcta.\n\nVerificar que su correo y teléfono estén bien escritos.\n\nRevisar su bandeja de entrada y spam para confirmaciones.\n\nMantener su comprobante de compra y/o correo de confirmación.\n\nSi el usuario ingresa datos incorrectos y esto impide confirmaciones o validaciones, el Organizador no se hace responsable por inconvenientes derivados de ese error.\n\n5. Compra de tickets y confirmación\n\nLos tickets se asignan por el sistema en función de disponibilidad y reglas internas de validación para evitar duplicidad.\n\nLa compra se considera válida únicamente cuando el sistema registre pago aprobado/confirmado.\n\nSi el pago queda en estado pendiente, fallido, anulado o no confirmado por el proveedor, los tickets asociados no se considerarán válidos.\n\nEl Organizador podrá solicitar verificaciones técnicas razonables cuando existan inconsistencias de pago, duplicidades o actividades sospechosas.\n\nConfirmación al correo:\nCuando la compra sea confirmada, el usuario recibirá un correo con el detalle de su participación, incluyendo tickets asignados y datos relevantes. El usuario es responsable de asegurar que su bandeja reciba correctamente el mensaje.\n\n6. Integridad del sistema, control de duplicidad y anti-fraude\n\nPara mantener transparencia, la plataforma incluye controles para:\n\nEvitar tickets duplicados.\n\nEvitar múltiples clientes con la misma cédula/ID (según configuración del sistema).\n\nDetectar intentos de abuso, automatización o manipulación.\n\nEl Organizador podrá:\n\nSuspender compras que presenten patrones anómalos.\n\nAnular participaciones con indicios de fraude o suplantación.\n\nSolicitar verificación adicional de identidad cuando sea necesario.\n\n7. Premios y forma de entrega\n\nLos premios se anunciarán en los canales oficiales del Organizador.\nLa entrega del premio estará sujeta a:\n\nVerificación del ticket ganador en el sistema.\n\nVerificación de identidad del ganador (cédula/ID y coincidencia con datos registrados).\n\nConfirmación del correo de compra/confirmación cuando aplique.\n\nCoordinación razonable de logística y tiempos de entrega.\n\nEl Organizador podrá solicitar evidencia mínima razonable para validar identidad y entrega (ej.: foto del documento para comprobar titularidad, confirmación por llamada o mensaje, etc.), cuidando la privacidad.\n\n8. Sorteo en vivo y publicación del ganador\n\nEl sorteo puede realizarse en vivo mediante transmisión en canales oficiales.\nEl usuario acepta que, si resulta ganador, el Organizador pueda publicar:\n\nNombre (o forma abreviada razonable) del ganador.\n\nNúmero del ticket ganador.\n\nEl Organizador procurará no divulgar datos sensibles (por ejemplo, número completo de cédula) en transmisiones o publicaciones.\n\n9. Validación del ganador y causales de descalificación\n\nEl ganador deberá responder y colaborar con el proceso de validación.\nPodrá descalificarse a un ganador si:\n\nLos datos registrados no coinciden con su identidad.\n\nNo se logra contactarlo en un plazo razonable (según criterio operativo del Organizador).\n\nSe detecta fraude, suplantación, manipulación o compra irregular.\n\nEl ticket ganador está vinculado a una compra no confirmada o anulada.\n\nEl usuario se niega a entregar información mínima necesaria para validar la entrega.\n\nEn caso de descalificación, el Organizador podrá definir un reemplazo o repetir el procedimiento según reglas operativas anunciadas.\n\n10. Cambios, ajustes y decisiones del Organizador\n\nEl Organizador podrá actualizar estos T&C cuando:\n\nSea necesario por seguridad, prevención de fraude o mejoras del sistema.\n\nExistan cambios técnicos, operativos o de proveedores.\n\nSea necesario aclarar reglas ante situaciones no previstas.\n\nRegla de interpretación:\nSi existe ambigüedad, vacíos, situaciones no contempladas o controversias técnicas, el usuario acepta que prevalecerá la decisión del Organizador, aplicada de forma razonable para proteger la transparencia, seguridad y continuidad de la Dinámica.\n\n11. Reembolsos, anulaciones y contracargos\n\nSalvo disposición distinta comunicada por el Organizador:\n\nUna compra confirmada puede no ser reembolsable, especialmente si ya fue registrada para sorteo o validación.\n\nEl Organizador podrá anular compras cuando existan indicios de fraude, duplicidad, contracargos, uso indebido o incumplimiento de estos T&C.\n\nSi se inicia un contracargo (chargeback) ante el banco/proveedor de pago, el Organizador podrá suspender la participación asociada hasta que se resuelva el caso.\n\nCualquier solicitud debe enviarse a soporteyvossoee@gmail.com\n con la información necesaria para revisión.\n\n12. Disponibilidad del servicio y fallas técnicas\n\nLa plataforma puede experimentar interrupciones o fallas por motivos técnicos, mantenimiento, congestión, servicios de terceros o causas fuera del control del Organizador.\n\nEl Organizador no garantiza disponibilidad continua e ininterrumpida. Sin embargo, procurará restablecer el servicio en un tiempo razonable y aplicar medidas para asegurar integridad del proceso.\n\nEn casos de incidentes técnicos relevantes (por ejemplo, errores de asignación, confirmaciones inconsistentes o fallas de terceros), el Organizador podrá:\n\nPausar temporalmente la Dinámica.\n\nCorregir registros conforme a evidencia técnica del sistema.\n\nTomar decisiones razonables para preservar transparencia y continuidad.\n\n13. Conductas prohibidas\n\nSe prohíbe:\n\nUsar datos falsos o suplantar identidad.\n\nIntentar manipular el sistema, automatizar compras de forma abusiva, o vulnerar seguridad.\n\nRealizar reclamos maliciosos o con información alterada.\n\nDifundir información falsa que afecte el proceso o reputación del Organizador.\n\nEl Organizador podrá bloquear usuarios y anular participaciones cuando detecte estas conductas.\n\n14. Protección de datos\n\nEl tratamiento de datos personales se rige por la Política de Privacidad publicada por el Organizador. Al participar, el usuario declara haberla leído y aceptado.\n\n15. Comunicaciones oficiales\n\nSe considerarán canales oficiales:\n\nLa plataforma web de la Dinámica\n\nLos correos enviados desde el sistema\n\nLos canales y publicaciones indicadas por el Organizador (por ejemplo, página oficial)\n\nEl usuario debe desconfiar de mensajes de terceros que soliciten datos sensibles. El Organizador no pedirá claves, contraseñas ni códigos de seguridad por mensajes.\n\n16. Limitación de responsabilidad\n\nEl Organizador no será responsable por:\n\nErrores en datos ingresados por el usuario.\n\nProblemas de correo del usuario (spam, bloqueo, bandeja llena).\n\nInterrupciones causadas por proveedores externos (hosting, pasarelas, internet, etc.).\n\nDaños indirectos o pérdidas derivadas del uso de la plataforma.\n\nLa responsabilidad del Organizador se limita a medidas razonables para gestionar la Dinámica con transparencia y seguridad, conforme a la evidencia del sistema.\n\n17. Contacto y soporte\n\nPara soporte, consultas, validaciones o reclamos:\n📩 soporteyvossoee@gmail.com\n\n18. Aceptación\n\nAl registrarse, comprar tickets o participar, el usuario confirma su aceptación total de estos Términos y Condiciones y de la Política de Privacidad vigente."
+  },
+  "customers": [
+    {
+      "firstName": "SEBASTIAN VICENTE",
+      "lastName": "AVILA QUINCHE ",
+      "fullName": "AVILA QUINCHE  SEBASTIAN VICENTE",
+      "email": "sebastianavila19@yahoo.com",
+      "idNumber": "0302302609",
+      "phone": "0983440106",
+      "country": "Ecuador",
+      "province": "Cañar",
+      "city": "AZOGUES",
+      "postalCode": "102",
+      "id": "ml4l5h2h4etrm",
+      "createdAt": "2026-02-03T03:40:54.269Z",
+      "updatedAt": "2026-02-03T03:40:54.269Z"
+    },
+    {
+      "firstName": "VIVI",
+      "lastName": "AVI",
+      "fullName": "AVI VIVI",
+      "email": "sebastianavila19@yahoo.com",
+      "idNumber": "1234567890",
+      "phone": "0983440106",
+      "country": "Ecuador",
+      "province": "Cañar",
+      "city": "AZOGUES",
+      "postalCode": "102",
+      "id": "ml4l5h2isovzh",
+      "createdAt": "2026-02-03T03:40:54.269Z",
+      "updatedAt": "2026-02-03T03:40:54.269Z"
+    },
+    {
+      "firstName": "VIVIANA FRANCISCA",
+      "lastName": "PACHECO CAPA",
+      "fullName": "PACHECO CAPA VIVIANA FRANCISCA",
+      "email": "sebastianavila19@gmail.com",
+      "idNumber": "0123456789",
+      "phone": "1234567970",
+      "country": "Ecuador",
+      "province": "Cañar",
+      "city": "azogues",
+      "postalCode": "123215",
+      "id": "ml5vhnreyta09",
+      "createdAt": "2026-02-03T03:40:54.269Z",
+      "updatedAt": "2026-02-03T03:40:54.269Z"
+    }
+  ]
+}
