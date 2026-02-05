@@ -1,13 +1,13 @@
 {
-  "total_pageviews": 100,
-  "total_unique": 2,
+  "total_pageviews": 17,
+  "total_unique": 1,
   "daily_stats": {
-    "2026-02-02": {
-      "pageviews": 72,
-      "unique": 1
+    "2026-02-04": {
+      "pageviews": 14,
+      "unique": 0
     },
-    "2026-02-03": {
-      "pageviews": 28,
+    "2026-02-05": {
+      "pageviews": 3,
       "unique": 1
     }
   }

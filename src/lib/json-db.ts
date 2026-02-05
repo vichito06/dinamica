@@ -198,6 +198,14 @@ function readDB(): DB {
         return data;
     } catch (e) {
         console.error('DB Read Error:', e);
+        // CRITICAL: Do NOT return initial data if file exists but is corrupted,
+        // as this would lead to DATA LOSS on the next write.
+        if (fs.existsSync(DATA_FILE)) {
+            const backupPath = `${DATA_FILE}.corrupted.${Date.now()}`;
+            fs.copyFileSync(DATA_FILE, backupPath);
+            console.error(`Corrupted database backed up to: ${backupPath}`);
+            throw new Error(`Database corrupted. Backup created at ${backupPath}. Fix manually.`);
+        }
         return getInitialData();
     }
 }
