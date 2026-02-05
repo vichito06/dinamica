@@ -1,14 +1,14 @@
 {
-  "total_pageviews": 17,
-  "total_unique": 1,
+  "total_pageviews": 23,
+  "total_unique": 2,
   "daily_stats": {
     "2026-02-04": {
       "pageviews": 14,
       "unique": 0
     },
     "2026-02-05": {
-      "pageviews": 3,
-      "unique": 1
+      "pageviews": 9,
+      "unique": 2
     }
   }
 }

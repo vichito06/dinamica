@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const DB_PATH = path.join(process.cwd(), 'analytics-data.json');
+const DATA_DIR = process.env.DATA_DIR || process.cwd();
+const DB_PATH = path.join(DATA_DIR, 'analytics-data.json');
 
 interface AnalyticsData {
     total_pageviews: number;

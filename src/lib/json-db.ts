@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const DATA_FILE = path.join(process.cwd(), 'raffle-data.json');
+const DATA_DIR = process.env.DATA_DIR || process.cwd();
+const DATA_FILE = path.join(DATA_DIR, 'raffle-data.json');
 
 export type TicketStatus = 'reserved' | 'paid' | 'cancelled' | 'expired';
 

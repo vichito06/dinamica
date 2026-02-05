@@ -3,9 +3,10 @@ import { getSaleById, updateSale } from '@/lib/json-db';
 
 export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
-    const id = parseInt(params.id, 10);
+    const { id: idParam } = await params;
+    const id = parseInt(idParam, 10);
     const sale = getSaleById(id);
 
     if (!sale) {
@@ -17,10 +18,11 @@ export async function GET(
 
 export async function PUT(
     request: Request,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const id = parseInt(params.id, 10);
+        const { id: idParam } = await params;
+        const id = parseInt(idParam, 10);
         const body = await request.json();
 
         const updatedSale = updateSale(id, body);
