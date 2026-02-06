@@ -3,7 +3,7 @@ import { getCustomersSummary } from '@/lib/json-db';
 
 export async function GET() {
     try {
-        const customers = getCustomersSummary();
+        const customers = await getCustomersSummary();
         return NextResponse.json(customers);
     } catch (error) {
         console.error('Error fetching customers summary:', error);

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAnalyticsData } from '@/lib/analytics-db';
 
 export async function GET(request: Request) {
-    const data = getAnalyticsData();
+    const data = await getAnalyticsData();
     const today = new Date().toISOString().split('T')[0];
 
     // Get stats for today, or 0 if none

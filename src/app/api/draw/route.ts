@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
     try {
-        const result = pickWinner();
+        const result = await pickWinner();
 
         if (!result) {
             return NextResponse.json(
