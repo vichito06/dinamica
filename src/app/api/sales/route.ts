@@ -5,7 +5,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const q = searchParams.get('q') || undefined;
 
-    const sales = getSalesSearch(q);
+    const sales = await getSalesSearch(q);
     return NextResponse.json(sales);
 }
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
         }
 
         // Process Sale (Confirm Reservation)
-        const sale = confirmSale(
+        const sale = await confirmSale(
             {
                 firstName: personalData.firstName || '',
                 lastName: personalData.lastName || '',

@@ -1,8 +1,12 @@
-import fs from 'fs';
-import path from 'path';
+import prisma from '@/lib/prisma';
+import fs from "node:fs/promises";
+import path from "node:path";
 
-const DATA_DIR = process.env.DATA_DIR || process.cwd();
-const DATA_FILE = path.join(DATA_DIR, 'raffle-data.json');
+// Persistence configuration
+const APP_STATE_ID = "singleton";
+const SEED_PATH = path.join(process.cwd(), "raffle-data.json");
+
+// --- Interfaces ---
 
 export type TicketStatus = 'reserved' | 'paid' | 'cancelled' | 'expired';
 
@@ -70,7 +74,7 @@ const DEFAULT_SETTINGS: Settings = {
     privacyHtml: "<h2>Política de Privacidad</h2><p>Respetamos tu privacidad y protegemos tus datos personales...</p>"
 };
 
-interface DB {
+export interface DB {
     sales: Sale[];
     tickets: Record<string, Ticket>;
     settings: Settings;
@@ -87,21 +91,17 @@ function generateId() {
 
 /**
  * Syncs a customer record based EXCLUSIVELY on idNumber (Cédula).
- * To ensure stability during migrations, it can reuse an ID from an existing pool.
  */
 function syncCustomerRecord(db: DB, customerData: Customer, idPool: CustomerRecord[] = []): string {
     let index = -1;
 
-    // RULE: Identity = Cédula.
     if (customerData.idNumber && customerData.idNumber.trim() !== '') {
-        // Search in the current collection being built
         index = db.customers.findIndex(c => c.idNumber === customerData.idNumber);
     }
 
     const now = new Date().toISOString();
 
     if (index >= 0) {
-        // Update the record in the current build with most recent data
         const existing = db.customers[index];
         db.customers[index] = {
             ...existing,
@@ -110,7 +110,6 @@ function syncCustomerRecord(db: DB, customerData: Customer, idPool: CustomerReco
         };
         return existing.id;
     } else {
-        // Not found in current build. Check if we can reuse an ID from the pool (stable identity)
         let customerId: string | undefined;
         if (customerData.idNumber && customerData.idNumber.trim() !== '') {
             const original = idPool.find(c => c.idNumber === customerData.idNumber);
@@ -129,176 +128,161 @@ function syncCustomerRecord(db: DB, customerData: Customer, idPool: CustomerReco
     }
 }
 
-function readDB(): DB {
-    if (!fs.existsSync(DATA_FILE)) {
-        const initial = getInitialData();
-        fs.writeFileSync(DATA_FILE, JSON.stringify(initial, null, 2));
-        return initial;
-    }
+// --- Persistence Logic ---
+
+/**
+ * Loads state from Neon DB (via Prisma).
+ * Falls back to local raffle-data.json ONLY for seeding if DB is empty.
+ */
+export async function loadState(): Promise<DB> {
     try {
-        const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-        let changed = false;
+        const row = await prisma.appState.findUnique({
+            where: { id: APP_STATE_ID }
+        });
 
-        // Ensure settings
-        if (!data.settings) {
-            data.settings = DEFAULT_SETTINGS;
-            changed = true;
+        if (row?.data) {
+            // Ensure settings exist even if loaded from DB
+            const data = row.data as unknown as DB;
+            if (!data.settings) data.settings = DEFAULT_SETTINGS;
+            return data;
         }
 
-        // --- Data Integrity & Repair Logic (MIGRATION) ---
-        // We rebuild 'customers' to ensure Cédula-based uniqueness and stable IDs.
-        if (data.sales) {
-            const originalCustomers = data.customers || [];
-            const newCustomers: CustomerRecord[] = [];
-
-            // Build a temp database structure to use with helper
-            const tempDB = { ...data, customers: newCustomers };
-
-            // Sort chronically to ensure createdAt is accurate for the first purchase
-            const chronologicalSales = [...data.sales].reverse();
-
-            chronologicalSales.forEach((s: any) => {
-                // Ensure snapshot
-                if (!s.customer) {
-                    s.customer = {
-                        firstName: '', lastName: '', fullName: s.client || '',
-                        email: s.email || '', idNumber: s.idNumber || '',
-                        phone: s.phone || '', country: 'Ecuador',
-                        province: s.province || '', city: s.city || '', postalCode: ''
-                    };
-                }
-
-                // Map sale to customerId and build/update customer record
-                // REUSING original IDs based on Cédula for stability across different readDB() calls
-                s.customerId = syncCustomerRecord(tempDB, s.customer, originalCustomers);
-            });
-
-            data.customers = newCustomers;
-            data.sales = chronologicalSales.reverse(); // Back to UI order
-            changed = true;
+        // Seed from local file if DB is empty
+        console.log("Seeding Database from local file...");
+        let seed = getInitialData();
+        try {
+            const seedRaw = await fs.readFile(SEED_PATH, "utf8");
+            seed = JSON.parse(seedRaw);
+        } catch (e) {
+            console.warn("No local seed file found, starting fresh.");
         }
 
-        // Cleanup expired tickets
-        if (data.tickets) {
-            const now = new Date();
-            Object.keys(data.tickets).forEach(key => {
-                const ticket = data.tickets[key];
-                if (ticket.status === 'reserved' && ticket.expires_at) {
-                    if (new Date(ticket.expires_at) < now) {
-                        delete data.tickets[key];
-                        changed = true;
-                    }
-                }
-            });
-        }
+        // Ensure defaults in seed
+        if (!seed.settings) seed.settings = DEFAULT_SETTINGS;
+        if (!seed.customers) seed.customers = [];
+        if (!seed.tickets) seed.tickets = {};
+        if (!seed.sales) seed.sales = [];
 
-        if (changed) {
-            fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-        }
+        // Save initial seed to DB
+        await prisma.appState.upsert({
+            where: { id: APP_STATE_ID },
+            create: { id: APP_STATE_ID, key: "global", data: seed as any },
+            update: { data: seed as any },
+        });
 
-        return data;
+        return seed;
     } catch (e) {
-        console.error('DB Read Error:', e);
-        // CRITICAL: Do NOT return initial data if file exists but is corrupted,
-        // as this would lead to DATA LOSS on the next write.
-        if (fs.existsSync(DATA_FILE)) {
-            const backupPath = `${DATA_FILE}.corrupted.${Date.now()}`;
-            fs.copyFileSync(DATA_FILE, backupPath);
-            console.error(`Corrupted database backed up to: ${backupPath}`);
-            throw new Error(`Database corrupted. Backup created at ${backupPath}. Fix manually.`);
-        }
+        console.error("Failed to load state:", e);
         return getInitialData();
     }
 }
 
-function writeDB(data: DB) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+export async function saveState(next: DB): Promise<void> {
+    try {
+        await prisma.appState.upsert({
+            where: { id: APP_STATE_ID },
+            create: { id: APP_STATE_ID, key: "global", data: next as any },
+            update: { data: next as any },
+        });
+    } catch (e) {
+        console.error("Failed to save state:", e);
+        throw e;
+    }
 }
 
 // 1. Reserve Tickets
-export function reserveTickets(ticketNumbers: string[], sessionId: string): { success: boolean, unavailable?: string[], error?: string } {
-    const db = readDB();
-    const unavailable: string[] = [];
+export async function reserveTickets(ticketNumbers: string[], sessionId: string): Promise<{ success: boolean, unavailable?: string[], error?: string }> {
+    try {
+        const db = await loadState();
+        const unavailable: string[] = [];
 
-    const invalid = ticketNumbers.some(n => {
-        const num = parseInt(n, 10);
-        return isNaN(num) || num < 1 || num > 9999;
-    });
+        const invalid = ticketNumbers.some(n => {
+            const num = parseInt(n, 10);
+            return isNaN(num) || num < 1 || num > 9999;
+        });
 
-    if (invalid) {
-        return { success: false, error: 'Tickets fuera de rango.' };
-    }
-
-    ticketNumbers.forEach(num => {
-        const ticket = db.tickets[num];
-        if (ticket) {
-            if (ticket.status === 'reserved' && ticket.session_id === sessionId) return;
-            unavailable.push(num);
+        if (invalid) {
+            return { success: false, error: 'Tickets fuera de rango.' };
         }
-    });
 
-    if (unavailable.length > 0) return { success: false, unavailable };
+        ticketNumbers.forEach(num => {
+            const ticket = db.tickets[num];
+            if (ticket) {
+                if (ticket.status === 'reserved' && ticket.session_id === sessionId) return;
+                unavailable.push(num);
+            }
+        });
 
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    ticketNumbers.forEach(num => {
-        db.tickets[num] = {
-            number: num, raffle_id: 1, status: 'reserved',
-            reserved_at: new Date().toISOString(), expires_at: expiresAt, session_id: sessionId
-        };
-    });
+        if (unavailable.length > 0) return { success: false, unavailable };
 
-    writeDB(db);
-    return { success: true };
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        ticketNumbers.forEach(num => {
+            db.tickets[num] = {
+                number: num, raffle_id: 1, status: 'reserved',
+                reserved_at: new Date().toISOString(), expires_at: expiresAt, session_id: sessionId
+            };
+        });
+
+        await saveState(db);
+        return { success: true };
+
+    } catch (e: any) {
+        throw e;
+    }
 }
 
 // 2. Confirm Sale
-export function confirmSale(
+export async function confirmSale(
     customerData: Customer,
     ticketNumbers: string[],
     total: number,
     sessionId: string
-) {
-    const db = readDB();
+): Promise<Sale> {
+    try {
+        const db = await loadState();
 
-    const missingOrStolen = ticketNumbers.filter(num => {
-        const t = db.tickets[num];
-        if (!t || t.status === 'paid') return true;
-        if (t.status === 'reserved' && t.session_id !== sessionId) return true;
-        return false;
-    });
+        const missingOrStolen = ticketNumbers.filter(num => {
+            const t = db.tickets[num];
+            if (!t || t.status === 'paid') return true;
+            if (t.status === 'reserved' && t.session_id !== sessionId) return true;
+            return false;
+        });
 
-    if (missingOrStolen.length > 0) {
-        throw new Error(`Tickets no disponibles: ${missingOrStolen.join(', ')}`);
-    }
-
-    // Upsert Customer strictly by Cédula
-    const customerId = syncCustomerRecord(db, customerData, db.customers);
-
-    const saleId = 1000 + db.sales.length + 1;
-    const newSale: Sale = {
-        id: saleId, customerId, customer: customerData,
-        tickets: ticketNumbers, total, date: new Date().toISOString()
-    };
-
-    ticketNumbers.forEach(num => {
-        if (db.tickets[num]) {
-            db.tickets[num].status = 'paid';
-            db.tickets[num].sale_id = saleId;
-            db.tickets[num].expires_at = undefined;
+        if (missingOrStolen.length > 0) {
+            throw new Error(`Tickets no disponibles: ${missingOrStolen.join(', ')}`);
         }
-    });
 
-    db.sales.unshift(newSale);
-    writeDB(db);
-    return newSale;
+        const customerId = syncCustomerRecord(db, customerData, db.customers);
+
+        const saleId = 1000 + db.sales.length + 1;
+        const newSale: Sale = {
+            id: saleId, customerId, customer: customerData,
+            tickets: ticketNumbers, total, date: new Date().toISOString()
+        };
+
+        ticketNumbers.forEach(num => {
+            if (db.tickets[num]) {
+                db.tickets[num].status = 'paid';
+                db.tickets[num].sale_id = saleId;
+                db.tickets[num].expires_at = undefined;
+            }
+        });
+
+        db.sales.unshift(newSale);
+        await saveState(db);
+        return newSale;
+    } catch (e: any) {
+        throw e;
+    }
 }
 
-export function getSales() {
-    return readDB().sales;
+export async function getSales() {
+    const db = await loadState();
+    return db.sales;
 }
 
-export function getSalesSearch(query?: string) {
-    const db = readDB();
+export async function getSalesSearch(query?: string) {
+    const db = await loadState();
     if (!query || query.trim() === '') return db.sales;
 
     const q = query.toLowerCase().trim();
@@ -307,10 +291,7 @@ export function getSalesSearch(query?: string) {
     return db.sales.filter(s => {
         const c = s.customer || ({} as Customer);
 
-        // 1. Search by Sale ID
         if (s.id.toString().includes(q)) return true;
-
-        // 2. Search by Customer Fields (Case-insensitive)
         if (c.fullName?.toLowerCase().includes(q)) return true;
         if (c.firstName?.toLowerCase().includes(q)) return true;
         if (c.lastName?.toLowerCase().includes(q)) return true;
@@ -318,30 +299,24 @@ export function getSalesSearch(query?: string) {
         if (c.email?.toLowerCase().includes(q)) return true;
         if (c.phone?.includes(q)) return true;
 
-        // 3. Search by Tickets (Exact match in the array)
         if (isNumeric) {
-            // Check for exact match or padded match (raffle uses 4 or 6 digits usually)
-            // The system seems to use 4 digits based on confirmSale code: .padStart(4, '0')
             const paddedQ = q.padStart(4, '0');
             const paddedQ6 = q.padStart(6, '0');
             if (s.tickets.some(t => t === q || t === paddedQ || t === paddedQ6)) {
                 return true;
             }
         }
-
         return false;
     });
 }
 
-export function getCustomers() {
-    return readDB().customers;
+export async function getCustomers() {
+    const db = await loadState();
+    return db.customers;
 }
 
-/**
- * Returns customers with aggregated stats (ventas, tickets, total)
- */
-export function getCustomersSummary() {
-    const db = readDB();
+export async function getCustomersSummary() {
+    const db = await loadState();
     const sales = db.sales;
     return db.customers.map(c => {
         const cSales = sales.filter(s => s.customerId === c.id);
@@ -356,53 +331,60 @@ export function getCustomersSummary() {
     });
 }
 
-export function getSoldTickets() {
-    const db = readDB();
+export async function getSoldTickets() {
+    const db = await loadState();
     return Object.values(db.tickets)
         .filter(t => t.status === 'paid' || t.status === 'reserved')
         .map(t => t.number);
 }
 
-export function getSettings() {
-    return readDB().settings;
-}
-
-export function updateSettings(newSettings: Partial<Settings>) {
-    const db = readDB();
-    db.settings = { ...db.settings, ...newSettings };
-    writeDB(db);
+export async function getSettings() {
+    const db = await loadState();
     return db.settings;
 }
 
-export function getSaleById(id: number) {
-    const db = readDB();
+export async function updateSettings(newSettings: Partial<Settings>) {
+    try {
+        const db = await loadState();
+        db.settings = { ...db.settings, ...newSettings };
+        await saveState(db);
+        return db.settings;
+    } catch (e: any) {
+        throw e;
+    }
+}
+
+export async function getSaleById(id: number) {
+    const db = await loadState();
     const sale = db.sales.find(s => s.id === id);
     if (!sale) return null;
     return sale;
 }
 
-export function updateSale(id: number, updates: Partial<Sale>) {
-    const db = readDB();
-    const index = db.sales.findIndex(s => s.id === id);
-    if (index === -1) throw new Error('Sale not found');
+export async function updateSale(id: number, updates: Partial<Sale>) {
+    try {
+        const db = await loadState();
+        const index = db.sales.findIndex(s => s.id === id);
+        if (index === -1) throw new Error('Sale not found');
 
-    const { id: _, tickets: __, total: ___, date: ____, ...safeUpdates } = updates;
-    const currentSale = db.sales[index];
+        const { id: _, tickets: __, total: ___, date: ____, ...safeUpdates } = updates;
+        const currentSale = db.sales[index];
 
-    if (safeUpdates.customer) {
-        // Re-sync and update currentSale with the potentially new ID/Record
-        currentSale.customerId = syncCustomerRecord(db, safeUpdates.customer, db.customers);
+        if (safeUpdates.customer) {
+            currentSale.customerId = syncCustomerRecord(db, safeUpdates.customer, db.customers);
+        }
+
+        db.sales[index] = { ...currentSale, ...safeUpdates };
+        await saveState(db);
+        return db.sales[index];
+    } catch (e: any) {
+        throw e;
     }
-
-    db.sales[index] = { ...currentSale, ...safeUpdates };
-    writeDB(db);
-    return db.sales[index];
 }
 
-export function pickWinner(raffleId: number = 1): { ticket: Ticket, sale: Sale, customer: Customer } | null {
-    const db = readDB();
+export async function pickWinner(raffleId: number = 1): Promise<{ ticket: Ticket, sale: Sale, customer: Customer } | null> {
+    const db = await loadState();
 
-    // 1. Get all eligible paid tickets for this raffle
     const eligibleTickets = Object.values(db.tickets).filter(t =>
         t.status === 'paid' &&
         t.raffle_id === raffleId
@@ -410,15 +392,12 @@ export function pickWinner(raffleId: number = 1): { ticket: Ticket, sale: Sale, 
 
     if (eligibleTickets.length === 0) return null;
 
-    // 2. Random selection
     const randomIndex = Math.floor(Math.random() * eligibleTickets.length);
     const winningTicket = eligibleTickets[randomIndex];
 
-    // 3. Get associated sale and customer
     const winningSale = db.sales.find(s => s.id === winningTicket.sale_id);
 
     if (!winningSale) {
-        // Should not happen for paid tickets, but handle gracefully
         throw new Error(`Data integrity error: Ticket ${winningTicket.number} has no associated sale.`);
     }
 

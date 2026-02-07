@@ -7,7 +7,7 @@ export async function GET(
 ) {
     const { id: idParam } = await params;
     const id = parseInt(idParam, 10);
-    const sale = getSaleById(id);
+    const sale = await getSaleById(id);
 
     if (!sale) {
         return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
@@ -25,7 +25,7 @@ export async function PUT(
         const id = parseInt(idParam, 10);
         const body = await request.json();
 
-        const updatedSale = updateSale(id, body);
+        const updatedSale = await updateSale(id, body);
         return NextResponse.json(updatedSale);
     } catch (error) {
         console.error('Update Sale Error:', error);

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Session ID required' }, { status: 400 });
         }
 
-        const result = reserveTickets(tickets, sessionId);
+        const result = await reserveTickets(tickets, sessionId);
 
         if (!result.success) {
             return NextResponse.json({

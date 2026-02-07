@@ -6,8 +6,8 @@ import { getSettings } from '@/lib/json-db';
 
 export const dynamic = 'force-dynamic';
 
-export default function Home() {
-  const settings = getSettings();
+export default async function Home() {
+  const settings = await getSettings();
 
   return (
     <main className="min-h-screen dark">

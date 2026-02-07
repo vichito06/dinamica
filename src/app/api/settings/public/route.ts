@@ -4,7 +4,7 @@ import { getSettings } from '@/lib/json-db';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
-    const settings = getSettings();
+    const settings = await getSettings();
     return NextResponse.json({
         contactEmail: settings.contactEmail,
         contactPhone: settings.contactPhone,

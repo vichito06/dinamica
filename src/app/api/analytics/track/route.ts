@@ -7,7 +7,7 @@ export async function POST(request: Request) {
         const { type } = body;
 
         if (type === 'pageview' || type === 'unique') {
-            incrementAnalytics(type);
+            await incrementAnalytics(type);
         }
 
         return NextResponse.json({ success: true });

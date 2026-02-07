@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     const q = (searchParams.get('q') || "").trim();
 
     // 1. Get filtered sales
-    const sales = getSalesSearch(q);
+    const sales = await getSalesSearch(q);
 
     // 2. BOM for Excel UTF-8 compatibility
     const BOM = "\ufeff";
