@@ -1,5 +1,12 @@
 import prisma from '@/lib/prisma';
-import { AppState } from '@prisma/client';
+import fs from "node:fs/promises";
+import path from "node:path";
+
+// Persistence configuration
+const APP_STATE_ID = "singleton";
+const SEED_PATH = path.join(process.cwd(), "raffle-data.json");
+
+// --- Interfaces ---
 
 export type TicketStatus = 'reserved' | 'paid' | 'cancelled' | 'expired';
 
@@ -67,7 +74,7 @@ const DEFAULT_SETTINGS: Settings = {
     privacyHtml: "<h2>Política de Privacidad</h2><p>Respetamos tu privacidad y protegemos tus datos personales...</p>"
 };
 
-interface DB {
+export interface DB {
     sales: Sale[];
     tickets: Record<string, Ticket>;
     settings: Settings;
@@ -121,183 +128,107 @@ function syncCustomerRecord(db: DB, customerData: Customer, idPool: CustomerReco
     }
 }
 
-// Helper interface to track version for optimistic locking
-interface DBWithVersion extends DB {
-    _version: number;
-}
+// --- Persistence Logic ---
 
-async function readDB(): Promise<DBWithVersion> {
+/**
+ * Loads state from Neon DB (via Prisma).
+ * Falls back to local raffle-data.json ONLY for seeding if DB is empty.
+ */
+export async function loadState(): Promise<DB> {
     try {
-        let appState = null;
+        const row = await prisma.appState.findUnique({
+            where: { id: APP_STATE_ID }
+        });
+
+        if (row?.data) {
+            // Ensure settings exist even if loaded from DB
+            const data = row.data as unknown as DB;
+            if (!data.settings) data.settings = DEFAULT_SETTINGS;
+            return data;
+        }
+
+        // Seed from local file if DB is empty
+        console.log("Seeding Database from local file...");
+        let seed = getInitialData();
         try {
-            // In dev without DB, this might throw or return null depending on prisma init
-            // But prisma client throws if connection fails usually.
-            appState = await prisma.appState.findUnique({ where: { id: 1 } });
+            const seedRaw = await fs.readFile(SEED_PATH, "utf8");
+            seed = JSON.parse(seedRaw);
         } catch (e) {
-            console.warn("Could not connect to DB, falling back to initial.", e);
+            console.warn("No local seed file found, starting fresh.");
         }
 
-        let data: DB;
-        let version = 0;
+        // Ensure defaults in seed
+        if (!seed.settings) seed.settings = DEFAULT_SETTINGS;
+        if (!seed.customers) seed.customers = [];
+        if (!seed.tickets) seed.tickets = {};
+        if (!seed.sales) seed.sales = [];
 
-        if (!appState) {
-            data = getInitialData();
-            // Try to initialize
-            try {
-                // If we have connection but no data, we create it.
-                // If no connection, this throws and we stay in memory (safe fallback for dev without DB)
-                const created = await prisma.appState.upsert({
-                    where: { id: 1 },
-                    update: {},
-                    create: {
-                        id: 1,
-                        version: 0,
-                        data: data as any
-                    }
-                });
-                version = created.version;
-            } catch (e) {
-                // Ignore write failure in fallback mode
-            }
-        } else {
-            data = appState.data as unknown as DB;
-            version = appState.version;
-        }
+        // Save initial seed to DB
+        await prisma.appState.upsert({
+            where: { id: APP_STATE_ID },
+            create: { id: APP_STATE_ID, key: "global", data: seed as any },
+            update: { data: seed as any },
+        });
 
-        let changed = false;
-
-        // Ensure settings
-        if (!data.settings) {
-            data.settings = DEFAULT_SETTINGS;
-            changed = true;
-        }
-
-        // --- Data Integrity & Repair Logic ---
-        if (data.sales) {
-            const originalCustomers = data.customers || [];
-            const newCustomers: CustomerRecord[] = [];
-            const tempDB = { ...data, customers: newCustomers };
-            const chronologicalSales = [...data.sales].reverse();
-
-            chronologicalSales.forEach((s: any) => {
-                if (!s.customer) {
-                    s.customer = {
-                        firstName: '', lastName: '', fullName: s.client || '',
-                        email: s.email || '', idNumber: s.idNumber || '',
-                        phone: s.phone || '', country: 'Ecuador',
-                        province: s.province || '', city: s.city || '', postalCode: ''
-                    };
-                }
-                s.customerId = syncCustomerRecord(tempDB, s.customer, originalCustomers);
-            });
-            data.customers = newCustomers;
-            data.sales = chronologicalSales.reverse();
-        }
-
-        // Cleanup expired tickets
-        if (data.tickets) {
-            const now = new Date();
-            Object.keys(data.tickets).forEach(key => {
-                const ticket = data.tickets[key];
-                if (ticket.status === 'reserved' && ticket.expires_at) {
-                    if (new Date(ticket.expires_at) < now) {
-                        delete data.tickets[key];
-                        changed = true;
-                    }
-                }
-            });
-        }
-
-        if (changed) {
-            try {
-                await prisma.appState.updateMany({
-                    where: { id: 1, version: version },
-                    data: {
-                        data: data as any,
-                        version: { increment: 1 }
-                    }
-                });
-            } catch (e) {
-                // Ignore bg save errors
-            }
-        }
-
-        return { ...data, _version: version };
-
+        return seed;
     } catch (e) {
-        console.error('DB Read Error:', e);
-        return { ...getInitialData(), _version: 0 };
+        console.error("Failed to load state:", e);
+        return getInitialData();
     }
 }
 
-async function writeDB(data: DBWithVersion): Promise<boolean> {
-    const { _version, ...cleanData } = data;
-
-    // Optimistic locking
-    const result = await prisma.appState.updateMany({
-        where: {
-            id: 1,
-            version: _version
-        },
-        data: {
-            data: cleanData as any,
-            version: { increment: 1 }
-        }
-    });
-
-    if (result.count === 0) {
-        throw new Error("Concurrency Conflict: Database updated by another process.");
+export async function saveState(next: DB): Promise<void> {
+    try {
+        await prisma.appState.upsert({
+            where: { id: APP_STATE_ID },
+            create: { id: APP_STATE_ID, key: "global", data: next as any },
+            update: { data: next as any },
+        });
+    } catch (e) {
+        console.error("Failed to save state:", e);
+        throw e;
     }
-    return true;
 }
 
 // 1. Reserve Tickets
 export async function reserveTickets(ticketNumbers: string[], sessionId: string): Promise<{ success: boolean, unavailable?: string[], error?: string }> {
-    let retries = 3;
-    while (retries > 0) {
-        try {
-            const db = await readDB();
-            const unavailable: string[] = [];
+    try {
+        const db = await loadState();
+        const unavailable: string[] = [];
 
-            const invalid = ticketNumbers.some(n => {
-                const num = parseInt(n, 10);
-                return isNaN(num) || num < 1 || num > 9999;
-            });
+        const invalid = ticketNumbers.some(n => {
+            const num = parseInt(n, 10);
+            return isNaN(num) || num < 1 || num > 9999;
+        });
 
-            if (invalid) {
-                return { success: false, error: 'Tickets fuera de rango.' };
-            }
-
-            ticketNumbers.forEach(num => {
-                const ticket = db.tickets[num];
-                if (ticket) {
-                    if (ticket.status === 'reserved' && ticket.session_id === sessionId) return;
-                    unavailable.push(num);
-                }
-            });
-
-            if (unavailable.length > 0) return { success: false, unavailable };
-
-            const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-            ticketNumbers.forEach(num => {
-                db.tickets[num] = {
-                    number: num, raffle_id: 1, status: 'reserved',
-                    reserved_at: new Date().toISOString(), expires_at: expiresAt, session_id: sessionId
-                };
-            });
-
-            await writeDB(db);
-            return { success: true };
-
-        } catch (e: any) {
-            if (e.message?.includes('Concurrency')) {
-                retries--;
-                continue;
-            }
-            throw e;
+        if (invalid) {
+            return { success: false, error: 'Tickets fuera de rango.' };
         }
+
+        ticketNumbers.forEach(num => {
+            const ticket = db.tickets[num];
+            if (ticket) {
+                if (ticket.status === 'reserved' && ticket.session_id === sessionId) return;
+                unavailable.push(num);
+            }
+        });
+
+        if (unavailable.length > 0) return { success: false, unavailable };
+
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        ticketNumbers.forEach(num => {
+            db.tickets[num] = {
+                number: num, raffle_id: 1, status: 'reserved',
+                reserved_at: new Date().toISOString(), expires_at: expiresAt, session_id: sessionId
+            };
+        });
+
+        await saveState(db);
+        return { success: true };
+
+    } catch (e: any) {
+        throw e;
     }
-    return { success: false, error: 'System busy, please try again.' };
 }
 
 // 2. Confirm Sale
@@ -307,59 +238,51 @@ export async function confirmSale(
     total: number,
     sessionId: string
 ): Promise<Sale> {
-    let retries = 3;
-    while (retries > 0) {
-        try {
-            const db = await readDB();
+    try {
+        const db = await loadState();
 
-            const missingOrStolen = ticketNumbers.filter(num => {
-                const t = db.tickets[num];
-                if (!t || t.status === 'paid') return true;
-                if (t.status === 'reserved' && t.session_id !== sessionId) return true;
-                return false;
-            });
+        const missingOrStolen = ticketNumbers.filter(num => {
+            const t = db.tickets[num];
+            if (!t || t.status === 'paid') return true;
+            if (t.status === 'reserved' && t.session_id !== sessionId) return true;
+            return false;
+        });
 
-            if (missingOrStolen.length > 0) {
-                throw new Error(`Tickets no disponibles: ${missingOrStolen.join(', ')}`);
-            }
-
-            const customerId = syncCustomerRecord(db, customerData, db.customers);
-
-            const saleId = 1000 + db.sales.length + 1;
-            const newSale: Sale = {
-                id: saleId, customerId, customer: customerData,
-                tickets: ticketNumbers, total, date: new Date().toISOString()
-            };
-
-            ticketNumbers.forEach(num => {
-                if (db.tickets[num]) {
-                    db.tickets[num].status = 'paid';
-                    db.tickets[num].sale_id = saleId;
-                    db.tickets[num].expires_at = undefined;
-                }
-            });
-
-            db.sales.unshift(newSale);
-            await writeDB(db);
-            return newSale;
-        } catch (e: any) {
-            if (e.message?.includes('Concurrency')) {
-                retries--;
-                continue;
-            }
-            throw e;
+        if (missingOrStolen.length > 0) {
+            throw new Error(`Tickets no disponibles: ${missingOrStolen.join(', ')}`);
         }
+
+        const customerId = syncCustomerRecord(db, customerData, db.customers);
+
+        const saleId = 1000 + db.sales.length + 1;
+        const newSale: Sale = {
+            id: saleId, customerId, customer: customerData,
+            tickets: ticketNumbers, total, date: new Date().toISOString()
+        };
+
+        ticketNumbers.forEach(num => {
+            if (db.tickets[num]) {
+                db.tickets[num].status = 'paid';
+                db.tickets[num].sale_id = saleId;
+                db.tickets[num].expires_at = undefined;
+            }
+        });
+
+        db.sales.unshift(newSale);
+        await saveState(db);
+        return newSale;
+    } catch (e: any) {
+        throw e;
     }
-    throw new Error('Transaction failed due to high concurrency. Please try again.');
 }
 
 export async function getSales() {
-    const db = await readDB();
+    const db = await loadState();
     return db.sales;
 }
 
 export async function getSalesSearch(query?: string) {
-    const db = await readDB();
+    const db = await loadState();
     if (!query || query.trim() === '') return db.sales;
 
     const q = query.toLowerCase().trim();
@@ -388,12 +311,12 @@ export async function getSalesSearch(query?: string) {
 }
 
 export async function getCustomers() {
-    const db = await readDB();
+    const db = await loadState();
     return db.customers;
 }
 
 export async function getCustomersSummary() {
-    const db = await readDB();
+    const db = await loadState();
     const sales = db.sales;
     return db.customers.map(c => {
         const cSales = sales.filter(s => s.customerId === c.id);
@@ -409,74 +332,58 @@ export async function getCustomersSummary() {
 }
 
 export async function getSoldTickets() {
-    const db = await readDB();
+    const db = await loadState();
     return Object.values(db.tickets)
         .filter(t => t.status === 'paid' || t.status === 'reserved')
         .map(t => t.number);
 }
 
 export async function getSettings() {
-    const db = await readDB();
+    const db = await loadState();
     return db.settings;
 }
 
 export async function updateSettings(newSettings: Partial<Settings>) {
-    let retries = 3;
-    while (retries > 0) {
-        try {
-            const db = await readDB();
-            db.settings = { ...db.settings, ...newSettings };
-            await writeDB(db);
-            return db.settings;
-        } catch (e: any) {
-            if (e.message?.includes('Concurrency')) {
-                retries--;
-                continue;
-            }
-            throw e;
-        }
+    try {
+        const db = await loadState();
+        db.settings = { ...db.settings, ...newSettings };
+        await saveState(db);
+        return db.settings;
+    } catch (e: any) {
+        throw e;
     }
-    throw new Error('Failed to update settings');
 }
 
 export async function getSaleById(id: number) {
-    const db = await readDB();
+    const db = await loadState();
     const sale = db.sales.find(s => s.id === id);
     if (!sale) return null;
     return sale;
 }
 
 export async function updateSale(id: number, updates: Partial<Sale>) {
-    let retries = 3;
-    while (retries > 0) {
-        try {
-            const db = await readDB();
-            const index = db.sales.findIndex(s => s.id === id);
-            if (index === -1) throw new Error('Sale not found');
+    try {
+        const db = await loadState();
+        const index = db.sales.findIndex(s => s.id === id);
+        if (index === -1) throw new Error('Sale not found');
 
-            const { id: _, tickets: __, total: ___, date: ____, ...safeUpdates } = updates;
-            const currentSale = db.sales[index];
+        const { id: _, tickets: __, total: ___, date: ____, ...safeUpdates } = updates;
+        const currentSale = db.sales[index];
 
-            if (safeUpdates.customer) {
-                currentSale.customerId = syncCustomerRecord(db, safeUpdates.customer, db.customers);
-            }
-
-            db.sales[index] = { ...currentSale, ...safeUpdates };
-            await writeDB(db);
-            return db.sales[index];
-        } catch (e: any) {
-            if (e.message?.includes('Concurrency')) {
-                retries--;
-                continue;
-            }
-            throw e;
+        if (safeUpdates.customer) {
+            currentSale.customerId = syncCustomerRecord(db, safeUpdates.customer, db.customers);
         }
+
+        db.sales[index] = { ...currentSale, ...safeUpdates };
+        await saveState(db);
+        return db.sales[index];
+    } catch (e: any) {
+        throw e;
     }
-    throw new Error('Failed to update sale');
 }
 
 export async function pickWinner(raffleId: number = 1): Promise<{ ticket: Ticket, sale: Sale, customer: Customer } | null> {
-    const db = await readDB();
+    const db = await loadState();
 
     const eligibleTickets = Object.values(db.tickets).filter(t =>
         t.status === 'paid' &&
