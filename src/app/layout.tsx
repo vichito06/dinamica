@@ -9,9 +9,15 @@ import Footer from '@/components/Footer';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Y Voss Oeee | Gran Rifa',
+  title: "Y Voss Oeee | Dinámica #1",
   description: "Participa en la Dinámica 1 de Y Voss Oeee. Números desde $1. Premios de $1000, $300 y $100. ¡Tu oportunidad de ganar!",
   keywords: ["rifa", "dinámica", "sorteo", "premio", "Y Voss Oeee"],
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

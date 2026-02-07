@@ -46,3 +46,5 @@ node_modules
 .env
 _backup_untracked/
 .env
+
+generate_favicons.py
