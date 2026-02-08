@@ -36,7 +36,7 @@ export default function AdminPage() {
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         // Simple demo authentication - in production use proper auth
-        if (password === 'admin123') {
+        if (password === 'Azogues2012') {
             setIsAuthenticated(true);
         } else {
             alert('Contraseña incorrecta');
@@ -71,8 +71,7 @@ export default function AdminPage() {
                                 placeholder="••••••••"
                                 className="w-full input-field"
                                 autoFocus
-                            />
-                            <p className="text-white/40 text-xs mt-2">Demo: usa "admin123"</p>
+                            
                         </div>
 
                         <button
