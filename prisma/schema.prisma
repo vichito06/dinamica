@@ -16,8 +16,47 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
+
 model Analytics {
   id        Int      @id @default(1)
   data      Json
   updatedAt DateTime @updatedAt
+}
+
+enum SaleStatus {
+  PENDING
+  PAID
+  CANCELED
+  FAILED
+}
+
+enum TicketStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+model Ticket {
+  id              String       @id @default(cuid())
+  number          Int          @unique
+  status          TicketStatus @default(AVAILABLE)
+  reservedUntil   DateTime?
+  reservedBySaleId String?
+  reservedBySale   Sale?        @relation(fields: [reservedBySaleId], references: [id], onDelete: SetNull)
+  saleId          String?
+  sale            Sale?        @relation("SoldTickets", fields: [saleId], references: [id])
+}
+
+model Sale {
+  id                  String     @id @default(cuid())
+  status              SaleStatus @default(PENDING)
+  amountCents         Int
+  currency            String     @default("USD")
+  payphonePaymentId   String?
+  payphoneClientTxId  String?    @unique
+  personalData        Json?
+  tickets             Ticket[]   @relation("SoldTickets")
+  reservedTickets     Ticket[]
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 }

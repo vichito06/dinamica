@@ -34,13 +34,21 @@ export async function GET(req: Request) {
 }
 
 // ✅ POST: prueba con PowerShell (body JSON)
-export async function POST(req: Request) {
-    const secret = req.headers.get("x-test-secret");
-    if (secret !== process.env.TEST_EMAIL_SECRET) {
+export async function POST(request: Request) {
+    const expected = process.env.TEST_EMAIL_SECRET;
+    if (!expected) {
+        return NextResponse.json(
+            { success: false, error: "Server misconfigured: TEST_EMAIL_SECRET missing" },
+            { status: 500 }
+        );
+    }
+
+    const secret = request.headers.get("x-test-secret");
+    if (secret !== expected) {
         return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
+    const body = await request.json().catch(() => ({}));
     const to = body?.to;
 
     if (!to) {

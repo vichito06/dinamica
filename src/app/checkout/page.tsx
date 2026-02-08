@@ -83,6 +83,11 @@ export default function CheckoutPage() {
         e.preventDefault();
 
         try {
+            // Updated Flow for Payphone Integration
+            // 1. Create Sale PENDING / Reserve Tickets logic (currently managed by /api/sales, but we might need a dedicated prep endpoint or modify /api/sales)
+            // Ideally, we first create the sale in our DB.
+            // Let's assume /api/sales creates the "PENDING" sale.
+
             const response = await fetch('/api/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -108,28 +113,41 @@ export default function CheckoutPage() {
             const result = await response.json();
 
             if (!response.ok) {
-                // Handle Duplicate Ticket Error or others
                 if (response.status === 409 || result.error) {
                     alert(result.error || 'Error: Algunos números ya no están disponibles.');
-                    // Optionally clear selection or redirect
                     router.push('/');
                     return;
                 }
                 throw new Error(result.error);
             }
 
-            // Success
-            setCurrentStep('confirmation');
-            // Clear local selection if needed
-            sessionStorage.removeItem('selectedNumbers');
+            // result should contain the saleId now.
+            const saleId = result.id;
 
-            setTimeout(() => {
-                router.push('/');
-            }, 5000);
+            // 2. Call /api/payphone/prepare with saleId
+            const prepareResponse = await fetch('/api/payphone/prepare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ saleId })
+            });
 
-        } catch (error) {
+            const prepareData = await prepareResponse.json();
+
+            if (!prepareResponse.ok) {
+                console.error("Prepare error", prepareData);
+                throw new Error(prepareData.error || "Error al conectar con Payphone");
+            }
+
+            // 3. Redirect to payUrl
+            if (prepareData.payUrl) {
+                window.location.href = prepareData.payUrl;
+            } else {
+                throw new Error("No se recibió URL de pago");
+            }
+
+        } catch (error: any) {
             console.error('Error processing payment:', error);
-            alert('Hubo un error al procesar el pago. Inténtalo de nuevo.');
+            alert(`Hubo un error al procesar el pago: ${error.message || 'Inténtalo de nuevo.'}`);
         }
     };
 

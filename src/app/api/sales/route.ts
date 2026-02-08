@@ -1,106 +1,87 @@
 import { NextResponse } from 'next/server';
-import { confirmSale, getSales, getSalesSearch } from '@/lib/json-db';
-import { sendTicketsEmail } from '@/lib/email';
+import { prisma } from '@/lib/prisma';
 
 export const runtime = 'nodejs';
-
-export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const q = searchParams.get('q') || undefined;
-
-    const sales = await getSalesSearch(q);
-    return NextResponse.json(sales);
-}
 
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        console.log('[API POST /sales] Payload received:', JSON.stringify(body, null, 2));
         const { personalData, tickets, total, sessionId } = body;
 
-        // Validation
+        // 1. Validation
         if (!tickets || tickets.length === 0) {
             return NextResponse.json({ error: 'No tickets selected' }, { status: 400 });
         }
 
-        if (!sessionId) {
-            return NextResponse.json({ error: 'Session ID missing' }, { status: 400 });
-        }
+        const ticketNumbers = tickets.map((t: any) => Number(t));
 
-        // Process Sale (Confirm Reservation)
-        const sale = await confirmSale(
-            {
-                firstName: personalData.firstName || '',
-                lastName: personalData.lastName || '',
-                fullName: personalData.name || `${personalData.lastName} ${personalData.firstName}`.trim(),
-                email: personalData.email,
-                idNumber: personalData.idNumber || '',
-                phone: personalData.phone || '',
-                country: personalData.country || 'Ecuador',
-                province: personalData.province || '',
-                city: personalData.city || '',
-                postalCode: personalData.postalCode || ''
-            },
-            tickets.map((t: number) => t.toString().padStart(4, '0')), // Ensure ID format
-            total,
-            sessionId
-        );
-
-        // Send Email Async (Fire and forget, but log error)
-        try {
-            // Check for idempotency
-            // We need to re-fetch the sale to be sure (though confirmSale returns it, best practice is to check fresh state if we were in a separate process, but here we can trust 'sale' from confirmSale for initial check, but let's be safe and use usage of updateSale to lock)
-
-            // In our JSON-DB, confirmSale just returned the object. 
-            // We will verify if email was already sent (unlikely in this same request, but good for retries if we had them)
-            if (sale.emailSentAt || sale.emailStatus === 'sent') {
-                console.log(`[API POST /sales] Email already sent for sale ${sale.id}`);
-            } else {
-                // 1. Mark as pending (optional but good for concurrency if we had it)
-                const { updateSale } = await import('@/lib/json-db'); // Import dynamically to avoid circular dep if any, or just standard import
-                await updateSale(sale.id, { emailStatus: 'pending' });
-
-                // 2. Prepare data
-                const ticketsFormatted = sale.tickets.map((t: any) => String(t).padStart(4, '0'));
-
-                // 3. Send
-                const result = await sendTicketsEmail({
-                    to: sale.customer.email,
-                    customerName: sale.customer.fullName,
-                    saleCode: String(sale.id),
-                    tickets: ticketsFormatted,
-                    total: Number(sale.total)
-                });
-
-                // 4. Persist result
-                if (result.success) {
-                    await updateSale(sale.id, {
-                        emailStatus: 'sent',
-                        emailSentAt: new Date().toISOString(),
-                        emailMessageId: (result.data as any)?.id // Cast to any to avoid type error
-                    });
-                    console.log(`[API POST /sales] Email sent to ${sale.customer.email}`);
-                } else {
-                    await updateSale(sale.id, {
-                        emailStatus: 'failed',
-                        emailLastError: String(result.error || 'Unknown error')
-                    });
-                    console.error('[API POST /sales] Email sending failed:', result.error);
+        // 2. Transaction: Verify Availability + Create Sale + Reserve
+        const result = await prisma.$transaction(async (tx) => {
+            // Check availability
+            const existingTickets = await tx.ticket.findMany({
+                where: {
+                    number: { in: ticketNumbers },
                 }
-            }
-        } catch (emailError) {
-            console.error('[API POST /sales] Email sending logic failed:', emailError);
-            // We do NOT fail the request because the sale is already confirmed in DB
-        }
+            });
 
-        return NextResponse.json({ success: true, sale });
+            // If we don't have all tickets in DB, we might need to create them (if your logic allows implicit creation)
+            // Or assume they exist. The schema has "number" unique.
+            // If they don't exist, we can create them as AVAILABLE or RESERVED.
+            // Let's assume we find collisions.
+
+            const now = new Date();
+            const unavailable = existingTickets.filter(t =>
+                t.status === 'SOLD' ||
+                (t.status === 'RESERVED' && t.reservedUntil && t.reservedUntil > now)
+            );
+
+            if (unavailable.length > 0) {
+                const unavailableNumbers = unavailable.map(t => t.number).join(', ');
+                throw new Error(`Los siguientes números ya no están disponibles: ${unavailableNumbers}`);
+            }
+
+            // Create Sale
+            const sale = await tx.sale.create({
+                data: {
+                    status: 'PENDING',
+                    amountCents: Math.round(Number(total) * 100), // Assuming total is $1 -> 100 cents
+                    currency: 'USD',
+                    personalData: personalData, // Storing JSON
+                    // We don't link tickets here yet, we do it via update or connect on Ticket side or implicit
+                }
+            });
+
+            // Reserve Tickets
+            // We need to upsert tickets or update existing ones.
+            // Since we need to handle "gap" tickets (tickets not yet in DB), upsert is best.
+            // But updateMany doesn't create.
+            // We iterate or use createMany with skipDuplicates? No, we need to update status.
+
+            for (const num of ticketNumbers) {
+                await tx.ticket.upsert({
+                    where: { number: num },
+                    update: {
+                        status: 'RESERVED',
+                        reservedBySaleId: sale.id,
+                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes
+                    },
+                    create: {
+                        number: num,
+                        status: 'RESERVED',
+                        reservedBySaleId: sale.id,
+                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
+                    }
+                });
+            }
+
+            return sale;
+        });
+
+        return NextResponse.json({ success: true, id: result.id, sale: result });
 
     } catch (error: any) {
-        if (error.message && error.message.includes('no están disponibles')) {
-            return NextResponse.json({ error: error.message }, { status: 409 });
-        }
-
-        console.error('Sale error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error('Sale creation error:', error);
+        const status = error.message.includes('disponibles') ? 409 : 500;
+        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
     }
 }
