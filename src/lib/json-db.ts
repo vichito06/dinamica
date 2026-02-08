@@ -46,6 +46,11 @@ export interface Sale {
     tickets: string[];
     total: number;
     date: string;
+    // Email tracking
+    emailSentAt?: string;
+    emailMessageId?: string;
+    emailStatus?: "pending" | "sent" | "failed";
+    emailLastError?: string;
 }
 
 export interface Settings {
