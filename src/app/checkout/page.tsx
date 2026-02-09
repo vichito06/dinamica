@@ -125,41 +125,41 @@ export default function CheckoutPage() {
 
             const prepareData = await prepareResponse.json();
 
-            if (!prepareResponse.ok) {
+            // Strict check based on `ok` field (Standardized JSON)
+            if (!prepareData.ok) {
                 console.error("Prepare error", prepareData);
                 const reqId = prepareData.requestId ? ` (ReqID: ${prepareData.requestId})` : "";
 
-                // Show specific missing variables if any
                 if (prepareData.missing) {
                     throw new Error(`Configuración incompleta: ${prepareData.missing.join(', ')}${reqId}`);
                 }
+                // Show clean error
                 throw new Error((prepareData.error || "Error al conectar con Payphone") + reqId);
             }
 
             // 3. Redirect to payUrl (Robust check)
-            const url = prepareData.paymentUrl || prepareData.url || prepareData.payUrl;
+            const url = prepareData.payUrl || prepareData.payWithCard || prepareData.payWithPayPhone;
 
             if (!url) {
-                console.log("Respuesta prepare:", prepareData);
+                console.log("Respuesta prepare (success but no url):", prepareData);
                 const reqId = prepareData.requestId ? ` (ReqID: ${prepareData.requestId})` : "";
-                alert("No llegó el link de pago desde PayPhone." + reqId);
+                // Fallback manually if we have paymentId but no URL? Unlikely.
+                alert("PayPhone no devolvió un link de pago." + reqId);
                 return;
             }
 
-            // Fallback UI included in alert if assignment fails (though hard to catch sync) or just relying on browser
-            // To be robust as requested: "Si el navegador bloquea o falla, muestra un botón/anchor visible"
-            // We can set a state here to show the manually clickable link.
-
+            // Attempt redirect, fallback to manual link UI
             try {
                 window.location.assign(url);
             } catch (err) {
-                // Force user to click
-                alert("Redirección bloqueada. Por favor usa el botón que aparecerá a continuación.");
+                console.error("Redirect failed:", err);
+                setManualPayUrl(url); // Show fallback UI
             }
 
-            // In case redirection is slow or blocked, we can update UI to show a button
-            // But we don't have a state for "Manual Pay Link" easily accesible in this function without modifying state structure.
-            // For now, let's just rely on the standard behavior but we can throw to the catch block to alert.
+            // Safety fallback if browser blocks redirect without throwing
+            setTimeout(() => {
+                setManualPayUrl(url);
+            }, 2000);
 
         } catch (error: any) {
             console.error('Error processing payment:', error);
@@ -171,6 +171,42 @@ export default function CheckoutPage() {
             }
         }
     };
+
+    // State for manual PayPhone link (Fallback)
+    const [manualPayUrl, setManualPayUrl] = useState<string | null>(null);
+
+    // Fallback UI Component
+    if (manualPayUrl) {
+        return (
+            <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">
+                <div className="glass-strong p-8 rounded-2xl max-w-md w-full text-center">
+                    <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+                    <h2 className="text-xl font-bold text-white mb-2">Redirección automática falló</h2>
+                    <p className="text-white/70 mb-6">
+                        No pudimos abrir la ventana de pago automáticamente. Por favor haz clic en el botón de abajo.
+                    </p>
+                    <a
+                        href={manualPayUrl}
+                        className="block w-full py-4 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors uppercase tracking-wide mb-4"
+                    >
+                        Pagar con PayPhone
+                    </a>
+                    <button
+                        onClick={() => setManualPayUrl(null)}
+                        className="text-white/50 hover:text-white underline text-sm"
+                    >
+                        Volver
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ... (rest of the component)
+
+    // And update handlePaymentSubmit logic inside the PaymentForm component or parent:
+    // Actually `handlePaymentSubmit` is in `CheckoutPage`. I will modify logic there.
+
 
     if (!selectedNumbers.length) {
         return (

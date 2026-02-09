@@ -2,8 +2,6 @@ export const runtime = "nodejs";
 
 import { prisma } from "@/lib/prisma";
 
-const BASE_URL = process.env.PAYPHONE_BASE_URL || "https://pay.payphonetodoesposible.com";
-
 export async function POST(req: Request) {
     try {
         const { id, clientTxId } = await req.json();
@@ -17,7 +15,9 @@ export async function POST(req: Request) {
             return Response.json({ error: "Config error" }, { status: 500 });
         }
 
-        const r = await fetch(`${BASE_URL}/api/button/V2/Confirm`, {
+        // Strict URL as requested for V2 Confirm
+        // Using strict URL instead of BASE_URL variable to avoid any ambiguity
+        const r = await fetch("https://pay.payphonetodoesposible.com/api/button/V2/Confirm", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
