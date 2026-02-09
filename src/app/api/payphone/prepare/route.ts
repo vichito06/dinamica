@@ -96,11 +96,20 @@ export async function POST(req: Request) {
             body: JSON.stringify(payload),
         });
 
-        const data = await r.json();
+        const raw = await r.text();
+        const ct = r.headers.get("content-type") || "";
 
         if (!r.ok) {
-            console.error("[Payphone Prepare] API Error:", data);
-            return Response.json({ error: "Prepare falló", details: data }, { status: 400 });
+            console.error("[Payphone Prepare] Upstream NOT OK:", r.status, raw.slice(0, 500));
+            return Response.json({ error: "PayPhone error", status: r.status }, { status: 502 });
+        }
+
+        let data: any;
+        try {
+            data = ct.includes("application/json") || raw.trim().startsWith("{") ? JSON.parse(raw) : JSON.parse(raw);
+        } catch {
+            console.error("[Payphone Prepare] Non-JSON response:", r.status, raw.slice(0, 500));
+            return Response.json({ error: "PayPhone returned non-JSON", status: r.status }, { status: 502 });
         }
 
         // Guarda ids PayPhone en la venta
