@@ -134,12 +134,16 @@ export default function CheckoutPage() {
                 throw new Error(prepareData.error || "Error al conectar con Payphone");
             }
 
-            // 3. Redirect to payUrl
-            if (prepareData.payUrl) {
-                window.location.assign(prepareData.payUrl);
-            } else {
-                throw new Error("No se recibió URL de pago");
+            // 3. Redirect to payUrl (Robust check)
+            const url = prepareData.paymentUrl || prepareData.url || prepareData.payUrl;
+
+            if (!url) {
+                console.log("Respuesta prepare:", prepareData);
+                alert("No llegó el link de pago desde PayPhone.");
+                return;
             }
+
+            window.location.assign(url);
 
         } catch (error: any) {
             console.error('Error processing payment:', error);
