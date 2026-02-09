@@ -30,13 +30,9 @@ export default function CheckoutPage() {
         postalCode: ''
     });
 
-    // Payment Data
+    // Payment Data - Simply method
     const [paymentData, setPaymentData] = useState({
-        cardNumber: '',
-        cardName: '',
-        expiryDate: '',
-        cvv: '',
-        paymentMethod: 'payphone' as 'payphone' | 'paypal'
+        paymentMethod: 'payphone'
     });
 
     useEffect(() => {
@@ -79,15 +75,12 @@ export default function CheckoutPage() {
         }
     };
 
-    const handlePaymentSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handlePaymentSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
 
         try {
-            // Updated Flow for Payphone Integration
-            // 1. Create Sale PENDING / Reserve Tickets logic (currently managed by /api/sales, but we might need a dedicated prep endpoint or modify /api/sales)
-            // Ideally, we first create the sale in our DB.
-            // Let's assume /api/sales creates the "PENDING" sale.
-
+            // New Payload for Payphone
+            // 1. Create Sale PENDING / Reserve Tickets logic
             const response = await fetch('/api/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -121,7 +114,6 @@ export default function CheckoutPage() {
                 throw new Error(result.error);
             }
 
-            // result should contain the saleId now.
             const saleId = result.id;
 
             // 2. Call /api/payphone/prepare with saleId
@@ -135,19 +127,28 @@ export default function CheckoutPage() {
 
             if (!prepareResponse.ok) {
                 console.error("Prepare error", prepareData);
+                // Show specific missing variables if any
+                if (prepareData.missing) {
+                    throw new Error(`Configuración incompleta: ${prepareData.missing.join(', ')}`);
+                }
                 throw new Error(prepareData.error || "Error al conectar con Payphone");
             }
 
             // 3. Redirect to payUrl
             if (prepareData.payUrl) {
-                window.location.href = prepareData.payUrl;
+                window.location.assign(prepareData.payUrl);
             } else {
                 throw new Error("No se recibió URL de pago");
             }
 
         } catch (error: any) {
             console.error('Error processing payment:', error);
-            alert(`Hubo un error al procesar el pago: ${error.message || 'Inténtalo de nuevo.'}`);
+            // Check if error message is about missing config
+            if (error.message && error.message.includes("Configuración incompleta")) {
+                alert(error.message);
+            } else {
+                alert("No se pudo iniciar el pago. Intenta nuevamente.");
+            }
         }
     };
 
@@ -554,8 +555,21 @@ function PersonalDataForm({ data, setData, onSubmit }: any) {
     );
 }
 
-// Payment Form
+// Payment Form - Payphone Only
 function PaymentForm({ data, setData, onSubmit, onBack }: any) {
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        setLoading(true);
+        await onSubmit(e);
+        // If onSubmit fails/throws, we might want to reset loading, but 
+        // usually we redirect or show alert. 
+        // In the main component, on error we should probably allow retry. 
+        // For now let's rely on the parent to handle errors, but we can't easily reset loading here without a prop.
+        // Actually, the parent `handlePaymentSubmit` is async. We can wrap it.
+        setLoading(false);
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, x: 20 }}
@@ -573,100 +587,22 @@ function PaymentForm({ data, setData, onSubmit, onBack }: any) {
             </button>
             <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-2">
                 <CreditCard className="w-6 h-6" />
-                Datos de Pago
+                Pago con Payphone
             </h2>
 
-            <form onSubmit={onSubmit} className="space-y-6">
-                {/* Payment Method Selection */}
-                {/* Payment Method Selection - PayPal removed temporarily */}
-                <div className="grid grid-cols-1 gap-4">
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${data.paymentMethod === 'payphone' ? 'border-white bg-white/10' : 'border-white/10'
-                        }`}>
-                        <input
-                            type="radio"
-                            name="paymentMethod"
-                            value="payphone"
-                            checked={data.paymentMethod === 'payphone'} // Always checked effectively if it's the only one
-                            onChange={(e) => setData({ ...data, paymentMethod: e.target.value })}
-                            className="sr-only"
-                        />
-                        <div className="text-center">
-                            <div className="text-white font-bold mb-1">Payphone</div>
-                            <div className="text-white/60 text-sm">Ecuador</div>
-                        </div>
-                    </label>
-                </div>
-
-                {/* Card Details */}
-                <div>
-                    <label className="block text-white/80 mb-2 font-medium">Número de Tarjeta *</label>
-                    <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="cc-number"
-                        required
-                        value={data.cardNumber}
-                        onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, '').slice(0, 16);
-                            const formatted = raw.match(/.{1,4}/g)?.join(' ') || raw;
-                            setData({ ...data, cardNumber: formatted });
-                        }}
-                        placeholder="1234 5678 9012 3456"
-                        maxLength={19}
-                        className="w-full input-field py-4 font-mono"
+            <div className="space-y-6">
+                <div className="p-6 bg-white/5 border border-white/10 rounded-xl text-center">
+                    <p className="text-white/80 mb-4 text-sm leading-relaxed">
+                        (Aquí no ingresas tu tarjeta. <strong>PayPhone</strong> te redirige a una página segura para pagar con tarjeta de crédito o débito.)
+                    </p>
+                    <Image
+                        src="/payphone-logo.png"
+                        alt="PayPhone"
+                        width={150}
+                        height={50}
+                        className="mx-auto opacity-90 my-4"
+                        style={{ filter: "brightness(0) invert(1)" }}
                     />
-                </div>
-
-                <div>
-                    <label className="block text-white/80 mb-2 font-medium">Nombre en la Tarjeta *</label>
-                    <input
-                        type="text"
-                        required
-                        value={data.cardName}
-                        onChange={(e) => setData({ ...data, cardName: e.target.value })}
-                        placeholder="JUAN PEREZ"
-                        className="w-full input-field"
-                    />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-white/80 mb-2 font-medium">Fecha de Expiración *</label>
-                        <input
-                            type="text"
-                            required
-                            value={data.expiryDate}
-                            onChange={(e) => {
-                                let val = e.target.value.replace(/\D/g, '');
-                                if (val.length > 4) val = val.slice(0, 4);
-
-                                if (val.length >= 2) {
-                                    const month = parseInt(val.slice(0, 2));
-                                    if (month > 12) val = '12' + val.slice(2);
-                                    if (month === 0 && val.length === 2) val = '01'; // auto-fix if user types 00
-
-                                    val = val.slice(0, 2) + '/' + val.slice(2);
-                                }
-                                setData({ ...data, expiryDate: val });
-                            }}
-                            placeholder="MM/AA"
-                            maxLength={5}
-                            className="w-full input-field"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-white/80 mb-2 font-medium">CVV *</label>
-                        <input
-                            type="text"
-                            required
-                            value={data.cvv}
-                            onChange={(e) => setData({ ...data, cvv: e.target.value })}
-                            placeholder="123"
-                            maxLength={4}
-                            className="w-full input-field"
-                        />
-                    </div>
                 </div>
 
                 {/* Security Notice */}
@@ -674,23 +610,32 @@ function PaymentForm({ data, setData, onSubmit, onBack }: any) {
                     <div className="flex gap-3">
                         <Lock className="w-5 h-5 text-green-400 flex-shrink-0" />
                         <div className="text-sm text-white/80">
-                            <div className="font-semibold text-white mb-1">Pago 100% Seguro</div>
-                            Tu información está protegida con encriptación SSL.
+                            <div className="font-semibold text-white mb-1">Pago seguro</div>
+                            Tu transacción es procesada por PayPhone.
                         </div>
                     </div>
                 </div>
 
                 <div className="flex gap-4">
-                    {/* Back button removed from here */}
                     <button
-                        type="submit"
-                        className="flex-1 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-green-500/50 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
+                        onClick={handleSubmit}
+                        disabled={loading}
+                        className="flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/50 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-lg"
                     >
-                        <Lock className="w-5 h-5" />
-                        Confirmar Pago
+                        {loading ? (
+                            <>
+                                <RefreshCw className="w-6 h-6 animate-spin" />
+                                Redirigiendo...
+                            </>
+                        ) : (
+                            <>
+                                <CreditCard className="w-6 h-6" />
+                                Pagar con PayPhone
+                            </>
+                        )}
                     </button>
                 </div>
-            </form>
+            </div>
         </motion.div>
     );
 }

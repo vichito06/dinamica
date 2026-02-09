@@ -33,11 +33,15 @@ export async function POST(req: Request) {
         if (!saleId) return Response.json({ error: "saleId requerido" }, { status: 400 });
 
         const token = process.env.PAYPHONE_TOKEN;
-        const storeId = process.env.PAYPHONE_STORE_ID;
+        const storeId = process.env.PAYPHONE_STORE_ID; // Optional now
 
         if (!token || !storeId) {
-            console.error("[Payphone Prepare] Missing env vars");
-            return Response.json({ error: "Configuration error" }, { status: 500 });
+            const missing = [];
+            if (!token) missing.push("PAYPHONE_TOKEN");
+            if (!storeId) missing.push("PAYPHONE_STORE_ID");
+
+            console.error(`[Payphone Prepare] Missing config: ${missing.join(", ")}`);
+            return Response.json({ error: "Configuration Error", missing }, { status: 500 });
         }
 
         await releaseExpiredReservations();
@@ -63,12 +67,11 @@ export async function POST(req: Request) {
             return Response.json({ error: "Tickets no están reservados correctamente" }, { status: 409 });
         }
 
-        // clientTransactionId: debe ser único.
-        // Format: SALE-{saleId}-{timestamp}
         const clientTransactionId = `SALE-${sale.id}-${Date.now()}`;
         console.log(`[Payphone Prepare] Preparing sale ${sale.id} with clientTxId ${clientTransactionId}`);
 
-        const payload = {
+        // Construct payload.
+        const payload: any = {
             storeId,
             amount: sale.amountCents,
             amountWithoutTax: sale.amountCents,
@@ -80,7 +83,7 @@ export async function POST(req: Request) {
             reference: `DIN1-${sale.id}`,
             clientTransactionId,
             responseUrl: process.env.PAYPHONE_RESPONSE_URL,
-            cancellationUrl: process.env.PAYPHONE_CANCEL_URL,
+            cancellationUrl: `${process.env.PAYPHONE_CANCEL_URL}?id=${sale.id}`,
             timeZone: -5,
         };
 

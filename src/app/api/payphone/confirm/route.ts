@@ -36,15 +36,14 @@ export async function POST(req: Request) {
         console.log(`[Payphone Confirm] Payphone status for ${clientTxId}: ${status}`);
 
         // Idempotencia + consistencia DB
-        await prisma.$transaction(async (tx) => {
+        const transactionResult = await prisma.$transaction(async (tx) => {
             const sale = await tx.sale.findUnique({
                 where: { payphoneClientTxId: clientTxId },
-                // We don't need to include relations unless we read them, but we need to update tickets
             });
 
             if (!sale) {
                 console.error(`[Payphone Confirm] Sale not found for clientTxId ${clientTxId}`);
-                return;
+                return null;
             }
 
             console.log(`[Payphone Confirm] Found Sale ${sale.id} with status ${sale.status}`);
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
             if (status === "Approved") {
                 if (sale.status === "PAID") {
                     console.log(`[Payphone Confirm] Sale ${sale.id} already PAID. Skipping.`);
-                    return;
+                    return sale;
                 }
 
                 console.log(`[Payphone Confirm] Marking Sale ${sale.id} as PAID`);
@@ -65,14 +64,15 @@ export async function POST(req: Request) {
                         status: "SOLD",
                         saleId: sale.id, // Set ownership
                         reservedUntil: null,
-                        reservedBySaleId: null // Clear reservation link (optional if we want to keep history, but schema implies exclusive ownership via saleId or reservation via reservedBySaleId. Let's keep reservedBySaleId null to avoid confusion or keep it? Schema: reservedBySaleId String? reservedBySale Sale? @relation(...). If we set saleId, reservedBySaleId is redundant but okay. Let's clear it to be clean.)
+                        reservedBySaleId: null
                     },
                 });
+                return sale;
             } else {
                 // Cancelled, Rejected, etc.
                 if (sale.status !== "PENDING") {
                     console.log(`[Payphone Confirm] Sale ${sale.id} is ${sale.status} (not PENDING). Skipping cancellation logic.`);
-                    return;
+                    return sale;
                 }
 
                 console.log(`[Payphone Confirm] Marking Sale ${sale.id} as CANCELED/FAILED`);
@@ -86,10 +86,21 @@ export async function POST(req: Request) {
                     where: { reservedBySaleId: sale.id, status: "RESERVED" },
                     data: { status: "AVAILABLE", reservedUntil: null, reservedBySaleId: null },
                 });
+                return sale;
             }
         });
 
-        return Response.json({ status, raw: data });
+        let soldTickets: string[] = [];
+
+        if (status === "Approved" && transactionResult) {
+            const tickets = await prisma.ticket.findMany({
+                where: { saleId: transactionResult.id },
+                select: { number: true }
+            });
+            soldTickets = tickets.map(t => t.number);
+        }
+
+        return Response.json({ status, raw: data, tickets: soldTickets });
     } catch (error) {
         console.error("[Payphone Confirm] Internal Error:", error);
         return Response.json({ error: "Internal Error" }, { status: 500 });
