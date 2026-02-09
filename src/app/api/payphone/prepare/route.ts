@@ -5,7 +5,12 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: Request) {
     const requestId = crypto.randomUUID();
-    const startTime = Date.now();
+
+    // Validar content-type
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+        return Response.json({ ok: false, code: "INVALID_CONTENT_TYPE", error: "Content-Type must be application/json", requestId }, { status: 400 });
+    }
 
     try {
         const bodyText = await req.text();
@@ -13,12 +18,14 @@ export async function POST(req: Request) {
         try {
             body = JSON.parse(bodyText);
         } catch (e) {
-            return Response.json({ ok: false, error: "Invalid JSON body", requestId }, { status: 400 });
+            return Response.json({ ok: false, code: "INVALID_JSON_BODY", error: "Invalid JSON body", requestId }, { status: 400 });
         }
 
         const { saleId } = body;
 
-        if (!saleId) return Response.json({ ok: false, error: "saleId requerido", requestId }, { status: 400 });
+        if (!saleId) {
+            return Response.json({ ok: false, code: "MISSING_SALE_ID", error: "saleId requerido", requestId }, { status: 400 });
+        }
 
         const token = process.env.PAYPHONE_TOKEN;
         const storeId = process.env.PAYPHONE_STORE_ID;
@@ -30,7 +37,7 @@ export async function POST(req: Request) {
 
         if (missing.length > 0) {
             console.error(`[Payphone Prepare] [${requestId}] Missing config: ${missing.join(", ")}`);
-            return Response.json({ ok: false, error: "Server Configuration Error", missing, requestId }, { status: 500 });
+            return Response.json({ ok: false, code: "SERVER_CONFIG_ERROR", error: "Server Configuration Error", missing, requestId }, { status: 500 });
         }
 
         // Release expired reservations before creating new one
@@ -41,20 +48,13 @@ export async function POST(req: Request) {
             include: { reservedTickets: true },
         });
 
-        if (!sale) return Response.json({ ok: false, error: "Venta no existe", requestId }, { status: 404 });
-        if (sale.status !== "PENDING") {
-            console.warn(`[Payphone Prepare] [${requestId}] Sale ${saleId} is ${sale.status}, not PENDING`);
-            return Response.json({ ok: false, error: "Venta no está PENDING", requestId }, { status: 409 });
+        if (!sale) {
+            return Response.json({ ok: false, code: "SALE_NOT_FOUND", error: "Venta no existe", requestId, saleId }, { status: 404 });
         }
 
-        // Verifica reservas
-        const now = new Date();
-        const badTicket = sale.reservedTickets.find(
-            (t) => t.status !== "RESERVED" || t.reservedBySaleId !== sale.id || (t.reservedUntil && t.reservedUntil < now)
-        );
-        if (badTicket) {
-            console.warn(`[Payphone Prepare] [${requestId}] Sale ${saleId} has invalid/expired tickets`);
-            return Response.json({ ok: false, error: "Tickets no están reservados correctamente", requestId }, { status: 409 });
+        if (sale.status !== "PENDING") {
+            console.warn(`[Payphone Prepare] [${requestId}] Sale ${saleId} is ${sale.status}, not PENDING`);
+            return Response.json({ ok: false, code: "SALE_NOT_PENDING", error: "Venta no está PENDING", requestId }, { status: 409 });
         }
 
         const clientTransactionId = `SALE-${sale.id}-${Date.now()}`;
@@ -80,7 +80,8 @@ export async function POST(req: Request) {
 
         // Strict URL as requested
         const targetUrl = "https://pay.payphonetodoesposible.com/api/button/Prepare";
-        console.log(`[Payphone Prepare] [${requestId}] Sending request to ${targetUrl}`);
+        const truncatedUrl = targetUrl.slice(0, 80);
+        console.log(`[Payphone Prepare] [${requestId}] Sending request to ${truncatedUrl}`);
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
@@ -91,10 +92,12 @@ export async function POST(req: Request) {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    "Accept": "application/json",
                     "Authorization": `Bearer ${token}`,
                     // Reinforce Origin/Referer to avoid blocking
-                    "Origin": req.headers.get("origin") || "https://yvossoeee.com",
-                    "Referer": req.headers.get("referer") || "https://yvossoeee.com/",
+                    "Origin": "https://yvossoeee.com",
+                    "Referer": "https://yvossoeee.com/",
+                    "User-Agent": "YVossOeee-Backend/1.0"
                 },
                 body: JSON.stringify(payload),
                 signal: controller.signal
@@ -103,16 +106,17 @@ export async function POST(req: Request) {
             clearTimeout(timeoutId);
             if (fetchError.name === 'AbortError') {
                 console.error(`[Payphone Prepare] [${requestId}] Timeout waiting for Payphone`);
-                return Response.json({ ok: false, error: "Payphone upstream timeout", requestId }, { status: 504 });
+                return Response.json({ ok: false, code: "PAYPHONE_TIMEOUT", error: "Payphone upstream timeout", requestId }, { status: 504 });
             }
             throw fetchError;
         } finally {
             clearTimeout(timeoutId);
         }
 
+        console.log(`[Payphone Prepare] [${requestId}] Upstream status: ${r.status}`);
+
         const raw = await r.text();
         const ct = r.headers.get("content-type") || "";
-        console.log(`[Payphone Prepare] [${requestId}] Received status ${r.status} type ${ct}`);
 
         // Safe parse
         let data: any;
@@ -128,8 +132,9 @@ export async function POST(req: Request) {
             console.error(`[Payphone Prepare] [${requestId}] Non-JSON response: ${r.status}`, raw.slice(0, 500));
             return Response.json({
                 ok: false,
-                error: "Non-JSON response from PayPhone",
-                bodySnippet: raw.slice(0, 200),
+                code: "PAYPHONE_NON_JSON",
+                error: "PayPhone returned non-JSON",
+                bodyPreview: raw.slice(0, 500),
                 status: r.status,
                 requestId
             }, { status: 502 });
@@ -139,9 +144,10 @@ export async function POST(req: Request) {
             console.error(`[Payphone Prepare] [${requestId}] Upstream NOT OK: ${r.status}`, data);
             return Response.json({
                 ok: false,
+                code: "PAYPHONE_UPSTREAM_ERROR",
                 error: "PayPhone Error",
-                details: data,
                 status: r.status,
+                bodyPreview: data,
                 requestId
             }, { status: 502 });
         }
@@ -160,17 +166,16 @@ export async function POST(req: Request) {
         // Return standardized successful response
         return Response.json({
             ok: true,
-            payUrl: data.payWithCard || data.payWithPayPhone, // Prefer card, fallback to app
-            payWithCard: data.payWithCard,
-            payWithPayPhone: data.payWithPayPhone,
+            requestId,
+            transactionId: clientTransactionId,
+            url: data.payWithCard || data.payWithPayPhone,
             paymentId: data.paymentId,
-            clientTransactionId,
-            requestId
+            // Debug info if needed, but keeping it clean
         });
 
     } catch (error: any) {
         console.error(`[Payphone Prepare] [${requestId}] Internal Error:`, error);
-        return Response.json({ ok: false, error: "Internal Server Error", requestId }, { status: 500 });
+        return Response.json({ ok: false, code: "INTERNAL_ERROR", error: "Internal Server Error", requestId }, { status: 500 });
     }
 }
 
@@ -192,6 +197,7 @@ async function releaseExpiredReservations() {
             console.log(`[Payphone Prepare] Released ${result.count} expired tickets`);
         }
     } catch (e) {
+        // Non-critical, just log
         console.error("[Payphone Prepare] Error releasing expired reservations:", e);
     }
 }

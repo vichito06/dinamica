@@ -77,11 +77,16 @@ export async function POST(request: Request) {
             return sale;
         });
 
-        return NextResponse.json({ success: true, id: result.id, sale: result });
+        return sale;
+    });
 
-    } catch (error: any) {
-        console.error('Sale creation error:', error);
-        const status = error.message.includes('disponibles') ? 409 : 500;
-        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
-    }
+    console.log(`[Sales API] Sale created: ${result.id}`);
+    // Return structured response as requested
+    return NextResponse.json({ ok: true, sale: result, id: result.id });
+
+} catch (error: any) {
+    console.error('Sale creation error:', error);
+    const status = error.message.includes('disponibles') ? 409 : 500;
+    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
+}
 }
