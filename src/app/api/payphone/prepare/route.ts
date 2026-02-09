@@ -1,8 +1,10 @@
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 import { prisma } from "@/lib/prisma";
 
-const BASE_URL = process.env.PAYPHONE_BASE_URL || "https://pay.payphonetodoesposible.com";
+// User requested NO fallback if envs are missing to avoid HTML errors.
+const BASE_URL = process.env.PAYPHONE_BASE_URL;
 
 async function releaseExpiredReservations() {
     try {
@@ -27,21 +29,34 @@ async function releaseExpiredReservations() {
 }
 
 export async function POST(req: Request) {
-    try {
-        const { saleId } = await req.json();
+    const requestId = crypto.randomUUID();
+    const startTime = Date.now();
 
-        if (!saleId) return Response.json({ error: "saleId requerido" }, { status: 400 });
+    try {
+        const bodyText = await req.text();
+        let body;
+        try {
+            body = JSON.parse(bodyText);
+        } catch (e) {
+            return Response.json({ error: "Invalid JSON body", requestId }, { status: 400 });
+        }
+
+        const { saleId } = body;
+
+        if (!saleId) return Response.json({ error: "saleId requerido", requestId }, { status: 400 });
 
         const token = process.env.PAYPHONE_TOKEN;
-        const storeId = process.env.PAYPHONE_STORE_ID; // Optional now
+        const storeId = process.env.PAYPHONE_STORE_ID;
 
-        if (!token || !storeId) {
-            const missing = [];
-            if (!token) missing.push("PAYPHONE_TOKEN");
-            if (!storeId) missing.push("PAYPHONE_STORE_ID");
+        // Critical Env Check
+        const missing = [];
+        if (!token) missing.push("PAYPHONE_TOKEN");
+        if (!storeId) missing.push("PAYPHONE_STORE_ID");
+        if (!BASE_URL) missing.push("PAYPHONE_BASE_URL");
 
-            console.error(`[Payphone Prepare] Missing config: ${missing.join(", ")}`);
-            return Response.json({ error: "Configuration Error", missing }, { status: 500 });
+        if (missing.length > 0) {
+            console.error(`[Payphone Prepare] [${requestId}] Missing config: ${missing.join(", ")}`);
+            return Response.json({ error: "Server Configuration Error", missing, requestId }, { status: 500 });
         }
 
         await releaseExpiredReservations();
@@ -51,10 +66,10 @@ export async function POST(req: Request) {
             include: { reservedTickets: true },
         });
 
-        if (!sale) return Response.json({ error: "Venta no existe" }, { status: 404 });
+        if (!sale) return Response.json({ error: "Venta no existe", requestId }, { status: 404 });
         if (sale.status !== "PENDING") {
-            console.warn(`[Payphone Prepare] Sale ${saleId} is ${sale.status}, not PENDING`);
-            return Response.json({ error: "Venta no está PENDING" }, { status: 409 });
+            console.warn(`[Payphone Prepare] [${requestId}] Sale ${saleId} is ${sale.status}, not PENDING`);
+            return Response.json({ error: "Venta no está PENDING", requestId }, { status: 409 });
         }
 
         // Verifica que los tickets sigan reservados para esta venta
@@ -63,12 +78,12 @@ export async function POST(req: Request) {
             (t) => t.status !== "RESERVED" || t.reservedBySaleId !== sale.id || (t.reservedUntil && t.reservedUntil < now)
         );
         if (badTicket) {
-            console.warn(`[Payphone Prepare] Sale ${saleId} has invalid/expired tickets`);
-            return Response.json({ error: "Tickets no están reservados correctamente" }, { status: 409 });
+            console.warn(`[Payphone Prepare] [${requestId}] Sale ${saleId} has invalid/expired tickets`);
+            return Response.json({ error: "Tickets no están reservados correctamente", requestId }, { status: 409 });
         }
 
         const clientTransactionId = `SALE-${sale.id}-${Date.now()}`;
-        console.log(`[Payphone Prepare] Preparing sale ${sale.id} with clientTxId ${clientTransactionId}`);
+        console.log(`[Payphone Prepare] [${requestId}] Preparing sale ${sale.id} with clientTxId ${clientTransactionId}`);
 
         // Construct payload.
         const payload: any = {
@@ -82,34 +97,55 @@ export async function POST(req: Request) {
             currency: sale.currency,
             reference: `DIN1-${sale.id}`,
             clientTransactionId,
-            responseUrl: process.env.PAYPHONE_RESPONSE_URL,
-            cancellationUrl: `${process.env.PAYPHONE_CANCEL_URL}?id=${sale.id}`,
+            responseUrl: process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return",
+            cancellationUrl: process.env.PAYPHONE_CANCEL_URL ? `${process.env.PAYPHONE_CANCEL_URL}?id=${sale.id}` : `https://yvossoeee.com/payphone/cancel?id=${sale.id}`,
             timeZone: -5,
         };
 
-        const r = await fetch(`${BASE_URL}/api/button/Prepare`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(payload),
-        });
+        const targetUrl = `${BASE_URL}/api/button/Prepare`;
+        console.log(`[Payphone Prepare] [${requestId}] Sending request to ${targetUrl}`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+        let r;
+        try {
+            r = await fetch(targetUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+        } catch (fetchError: any) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+                console.error(`[Payphone Prepare] [${requestId}] Timeout waiting for Payphone`);
+                return Response.json({ error: "Payphone upstream timeout", requestId }, { status: 504 });
+            }
+            throw fetchError;
+        } finally {
+            clearTimeout(timeoutId);
+        }
 
         const raw = await r.text();
         const ct = r.headers.get("content-type") || "";
 
+        console.log(`[Payphone Prepare] [${requestId}] Received status ${r.status} type ${ct}`);
+
         if (!r.ok) {
-            console.error("[Payphone Prepare] Upstream NOT OK:", r.status, raw.slice(0, 500));
-            return Response.json({ error: "PayPhone error", status: r.status }, { status: 502 });
+            console.error(`[Payphone Prepare] [${requestId}] Upstream NOT OK: ${r.status}`, raw.slice(0, 500));
+            return Response.json({ error: "PayPhone upstream error", status: r.status, requestId }, { status: 502 });
         }
 
         let data: any;
         try {
             data = ct.includes("application/json") || raw.trim().startsWith("{") ? JSON.parse(raw) : JSON.parse(raw);
         } catch {
-            console.error("[Payphone Prepare] Non-JSON response:", r.status, raw.slice(0, 500));
-            return Response.json({ error: "PayPhone returned non-JSON", status: r.status }, { status: 502 });
+            console.error(`[Payphone Prepare] [${requestId}] Non-JSON response: ${r.status}`, raw.slice(0, 500));
+            return Response.json({ error: "PayPhone returned non-JSON", status: r.status, requestId }, { status: 502 });
         }
 
         // Guarda ids PayPhone en la venta
@@ -121,15 +157,18 @@ export async function POST(req: Request) {
             },
         });
 
-        console.log(`[Payphone Prepare] Success. Sale ${saleId} linked to Payphone ID ${data.paymentId}`);
+        console.log(`[Payphone Prepare] [${requestId}] Success. Sale ${saleId} linked to Payphone ID ${data.paymentId} in ${Date.now() - startTime}ms`);
+
+        const payUrl = data.payWithCard || data.payWithPayPhone || data.paymentUrl || data.url;
 
         return Response.json({
-            payUrl: data.payWithCard || data.payWithPayPhone,
+            payUrl,
             paymentId: data.paymentId,
             clientTransactionId,
+            requestId
         });
     } catch (error) {
-        console.error("[Payphone Prepare] Internal Error:", error);
-        return Response.json({ error: "Internal Server Error" }, { status: 500 });
+        console.error(`[Payphone Prepare] [${requestId}] Internal Error:`, error);
+        return Response.json({ error: "Internal Server Error", requestId }, { status: 500 });
     }
 }
