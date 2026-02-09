@@ -97,7 +97,7 @@ export async function POST(req: Request) {
                 where: { saleId: transactionResult.id },
                 select: { number: true }
             });
-            soldTickets = tickets.map(t => t.number);
+            soldTickets = tickets.map(t => String(t.number).padStart(4, "0"));
         }
 
         return Response.json({ status, raw: data, tickets: soldTickets });
