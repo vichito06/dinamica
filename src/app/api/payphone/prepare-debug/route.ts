@@ -6,11 +6,11 @@ export async function GET(req: Request) {
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
-    // Hyper-Clean token normalization (camelCase Revert)
+    // Hyper-Clean token normalization (Definitive camelCase)
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
     const tokenLimpio = tokenRaw
         .trim()
-        .replace(/^bearer\s+/i, "") // Remove 'Bearer ' or 'bearer '
+        .replace(/^(bearer\s+|Bearer\s+)/i, "") // Radical prefix removal
         .replace(/[\r\n\t\s]+/g, "");
 
     const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel").trim();
 
     if (!tokenLimpio || !storeId || !responseUrl) {
-        return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: tokenLimpio.length, requestId }, { status: 500 });
+        return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: (tokenLimpio || "").length, requestId }, { status: 500 });
     }
 
     const url = `${baseUrl}/api/button/Prepare`;
@@ -34,13 +34,15 @@ export async function GET(req: Request) {
         tax: 0,
         service: 0,
         tip: 0,
-        clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.slice(0, 50),
         currency: "USD",
         storeId,
         reference: "TEST YVOSS",
         responseUrl,
         cancellationUrl: cancellationUrl || undefined,
-        timeZone: -5
+        timeZone: -5,
+        lat: "0.0",
+        lng: "0.0"
     };
 
     console.log('[PayPhone Prepare Debug] Requesting:', url);
@@ -49,9 +51,11 @@ export async function GET(req: Request) {
         const res = await fetch(url, {
             method: "POST",
             headers: {
-                "Authorization": `bearer ${tokenLimpio}`, // strictly lowercase
+                // Using standard "Bearer" (Uppercase) which PayPhone's IIS server often requires
+                "Authorization": `Bearer ${tokenLimpio}`,
                 "Content-Type": "application/json",
-                "Accept": "application/json"
+                "Accept": "application/json",
+                "User-Agent": "YVossOeee-App/1.0" // Added to avoid bot protection rejection
             },
             body: JSON.stringify(payload)
         });
@@ -60,13 +64,13 @@ export async function GET(req: Request) {
         const contentType = res.headers.get("content-type") || "";
 
         if (!res.ok || !contentType.includes("application/json")) {
-            // Enhanced diagnosis for HTML errors
+            // Precise diagnosis for HTML errors
             let htmlExtract = "";
             if (contentType.includes('text/html')) {
                 const h1 = raw.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = raw.match(/<h2>(.*?)<\/h2>/i)?.[1];
                 const desc = raw.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
-                htmlExtract = (h1 || h2 || desc || "No specific error found in HTML").trim();
+                htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
             console.error('[PayPhone Prepare Debug] Server Error:', {

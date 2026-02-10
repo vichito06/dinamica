@@ -28,11 +28,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
         }
 
-        // Hyper-Clean token normalization (camelCase Revert)
+        // Hyper-Clean token normalization (Definitive camelCase)
         const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
         const tokenLimpio = tokenRaw
             .trim()
-            .replace(/^bearer\s+/i, "") // Remove 'Bearer ' or 'bearer '
+            .replace(/^(bearer\s+|Bearer\s+)/i, "") // Radical prefix removal
             .replace(/[\r\n\t\s]+/g, "");
 
         const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Payload EXACTLY as requested (camelCase)
+        // Payload exactly as per latest docs (camelCase)
         const payload = {
             amount,
             amountWithoutTax,
@@ -69,21 +69,25 @@ export async function POST(request: Request) {
             tax,
             service,
             tip,
-            clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            reference: "Compra",
+            clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.slice(0, 50),
+            reference: "Compra Dinamica",
             storeId,
             currency: "USD",
             responseUrl,
             cancellationUrl: cancellationUrl || undefined,
-            timeZone: -5
+            timeZone: -5,
+            lat: "0.0",
+            lng: "0.0"
         };
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': `bearer ${tokenLimpio}`, // strictly lowercase
+                // Using standard "Bearer" (Uppercase) which PayPhone's IIS server often requires
+                'Authorization': `Bearer ${tokenLimpio}`,
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'User-Agent': 'YVossOeee-App/1.0' // Added to avoid bot protection rejection
             },
             body: JSON.stringify(payload)
         });
@@ -92,13 +96,13 @@ export async function POST(request: Request) {
         const contentType = response.headers.get('content-type') || '';
 
         if (!response.ok || !contentType.includes('application/json')) {
-            // Enhanced diagnosis for HTML errors
+            // Precise diagnosis for HTML errors (catching common IIS error tags)
             let htmlExtract = "";
             if (contentType.includes('text/html')) {
                 const h1 = responseText.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = responseText.match(/<h2>(.*?)<\/h2>/i)?.[1];
                 const desc = responseText.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
-                htmlExtract = (h1 || h2 || desc || "No specific error found in HTML").trim();
+                htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
             console.error('[PayPhone Prepare] Server Error:', {
@@ -108,8 +112,9 @@ export async function POST(request: Request) {
             });
 
             return NextResponse.json({
+                ok: false,
                 error: contentType.includes('application/json') ? 'PAYPHONE_UPSTREAM_ERROR' : 'PAYPHONE_NON_JSON',
-                status: response.status,
+                upstreamStatus: response.status,
                 contentType,
                 htmlExtract,
                 endpoint: url,
