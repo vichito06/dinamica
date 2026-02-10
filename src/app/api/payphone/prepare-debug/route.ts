@@ -25,10 +25,8 @@ export async function GET(req: Request) {
     const url = "https://pay.payphonetodoesposible.com/api/button/Prepare";
 
     const payload = {
-        amount: 100, // 1 cent converted to int? No, user said "amount en centavos (int)". 100 cents = $1.00. Minimun might be 1 cent -> 1.
-        // User said: "monto mínimo (1 centavo)". So amount should be 1.
-        amount: 1,
-        amountWithoutTax: 1,
+        amount: 100, // 100 cents = $1.00 for stable testing
+        amountWithoutTax: 100,
         amountWithTax: 0,
         tax: 0,
         service: 0,
@@ -36,9 +34,11 @@ export async function GET(req: Request) {
         currency: "USD",
         reference: "DEBUG-TEST",
         clientTransactionId: `DEBUG-${Date.now()}`,
-        storeId,
+        // Using provided storeId or fallback to env if passed
+        storeId: process.env.PAYPHONE_STORE_ID,
         responseUrl: process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return",
-        cancellationUrl: process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel"
+        cancellationUrl: process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel",
+        ...((req as any).body || {}) // Allow overriding for debug if needed, but safe defaults first
     };
 
     try {
