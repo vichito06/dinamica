@@ -1,7 +1,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { SaleStatus } from "@prisma/client";
+import { SaleStatus, TicketStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
         // Validate tickets
         const now = new Date();
         const invalidTickets = sale.tickets.filter(t =>
-            t.status !== 'RESERVED' ||
+            t.status !== TicketStatus.RESERVED ||
             (t.reservedUntil && t.reservedUntil < now)
         );
 

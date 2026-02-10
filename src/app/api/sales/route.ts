@@ -1,7 +1,6 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { Prisma, SaleStatus } from '@prisma/client';
+import { Prisma, SaleStatus, TicketStatus } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,8 +28,8 @@ export async function POST(request: Request) {
 
             const now = new Date();
             const unavailable = existingTickets.filter(t =>
-                t.status === 'SOLD' ||
-                (t.status === 'RESERVED' && t.reservedUntil && t.reservedUntil > now)
+                t.status === TicketStatus.SOLD ||
+                (t.status === TicketStatus.RESERVED && t.reservedUntil && t.reservedUntil > now)
             );
 
             if (unavailable.length > 0) {
@@ -78,13 +77,13 @@ export async function POST(request: Request) {
                 await tx.ticket.upsert({
                     where: { number: num },
                     update: {
-                        status: 'RESERVED',
+                        status: TicketStatus.RESERVED,
                         saleId: sale.id,
                         reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
                     },
                     create: {
                         number: num,
-                        status: 'RESERVED',
+                        status: TicketStatus.RESERVED,
                         saleId: sale.id,
                         reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
                     }

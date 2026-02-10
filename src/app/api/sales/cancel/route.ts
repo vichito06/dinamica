@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { SaleStatus } from "@prisma/client";
+import { SaleStatus, TicketStatus } from "@prisma/client";
 
 export async function POST(req: Request) {
     try {
@@ -22,8 +22,8 @@ export async function POST(req: Request) {
             });
 
             await tx.ticket.updateMany({
-                where: { saleId: saleId, status: "RESERVED" },
-                data: { status: "AVAILABLE", reservedUntil: null, saleId: null }
+                where: { saleId: saleId, status: TicketStatus.RESERVED },
+                data: { status: TicketStatus.AVAILABLE, reservedUntil: null, saleId: null }
             });
         });
 
