@@ -32,16 +32,15 @@ export async function GET(req: Request) {
         amount: 100,
         amountWithoutTax: 100,
         amountWithTax: 0,
-        tax: 0,
+        taxes: 0, // Plural mandatory
         service: 0,
         tip: 0,
-        // Alphanumeric Only
-        clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
+        clientTransactionID: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
         currency: "USD",
-        storeId,
+        storeID: storeId,
         reference: "TEST YVOSS V2",
-        responseUrl,
-        cancellationUrl: cancellationUrl || undefined,
+        responseURL: responseUrl,
+        cancellationURL: cancellationUrl || undefined,
         timeZone: -5,
         lat: "0.0",
         lng: "0.0"

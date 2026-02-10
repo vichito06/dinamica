@@ -62,21 +62,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Payload for V2 (camelCase + STRICTLY ALPHANUMERIC ID)
+        // Payload for V2 (Acronym-Case + Plural Taxes)
         const payload = {
             amount,
             amountWithoutTax,
             amountWithTax,
-            tax,
-            service,
-            tip,
-            // Strictly alphanumeric ID (Remove any _ from date/random)
-            clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
+            taxes: 0, // Plural mandatory
+            service: 0,
+            tip: 0,
+            clientTransactionID: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
             reference: "Compra Dinamica",
-            storeId,
+            storeID: storeId,
             currency: "USD",
-            responseUrl,
-            cancellationUrl: cancellationUrl || undefined,
+            responseURL: responseUrl,
+            cancellationURL: cancellationUrl || undefined,
             timeZone: -5,
             lat: "0.0",
             lng: "0.0"
