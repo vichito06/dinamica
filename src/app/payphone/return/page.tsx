@@ -1,136 +1,115 @@
-"use client";
+'use client';
 
-import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
-import Link from "next/link";
+import { useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { Check, X, Loader2, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
-function ReturnContent() {
-    const sp = useSearchParams();
+export default function PayPhoneReturnPage() {
+    const searchParams = useSearchParams();
     const router = useRouter();
-    const [msg, setMsg] = useState("Procesando pago...");
-    const [status, setStatus] = useState<"loading" | "approved" | "error">("loading");
-    const [tickets, setTickets] = useState<string[]>([]);
+    const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+    const [message, setMessage] = useState('');
 
     useEffect(() => {
-        const id = sp.get("id");
-        const clientTxId = sp.get("clientTransactionId");
+        const id = searchParams.get('id');
+        const clientTxId = searchParams.get('clientTransactionId');
 
         if (!id || !clientTxId) {
-            setMsg("No llegaron datos del pago. Si cancelaste, es normal.");
-            setStatus("error");
+            setStatus('error');
+            setMessage('Parámetros inválidos en el retorno de pago.');
             return;
         }
 
-        (async () => {
+        const confirmPayment = async () => {
             try {
-                const r = await fetch("/api/payphone/confirm", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ id, clientTxId }),
+                const response = await fetch('/api/payphone/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, clientTransactionId: clientTxId })
                 });
 
-                const data = await r.json();
+                const data = await response.json();
 
-                if (r.ok && (data.status === "Approved" || data.transactionStatus === "Approved")) {
-                    setMsg("¡Pago confirmado! Tus tickets están listos.");
-                    if (data.tickets && Array.isArray(data.tickets)) {
-                        setTickets(data.tickets);
-                    }
-                    setStatus("approved");
-                    // Clear session storage
+                if (response.ok && data.status === 'Approved') {
+                    setStatus('success');
+                    // Clear cart/session if needed
                     sessionStorage.removeItem('selectedNumbers');
                 } else {
-                    setMsg("El pago no fue aprobado o fue cancelado. Por favor intenta nuevamente.");
-                    setStatus("error");
-                    console.error("Payment not approved:", data);
+                    setStatus('error');
+                    setMessage(data.error || 'El pago no fue aprobado o fue cancelado.');
                 }
-            } catch (err) {
-                console.error("Error confirming payment:", err);
-                setMsg("Hubo un error al verificar el pago.");
-                setStatus("error");
+            } catch (error) {
+                console.error('Confirmation error:', error);
+                setStatus('error');
+                setMessage('Error de conexión al confirmar el pago.');
             }
-        })();
-    }, [sp]);
+        };
+
+        confirmPayment();
+    }, [searchParams]);
 
     return (
         <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">
-            <div className="glass-strong p-8 rounded-2xl max-w-lg w-full text-center">
-                <div
-                    className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${status === "loading"
-                            ? "bg-white/10 animate-pulse"
-                            : status === "approved"
-                                ? "bg-green-600"
-                                : "bg-red-600"
-                        }`}
-                >
-                    {status === "loading" ? (
-                        <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : status === "approved" ? (
-                        <Check className="w-10 h-10 text-white" />
-                    ) : (
-                        <X className="w-10 h-10 text-white" />
-                    )}
-                </div>
-
-                <h2 className="text-2xl font-bold text-white mb-4">
-                    {status === "loading" ? "Verificando..." :
-                        status === "approved" ? "¡Pago Confirmado!" : "Algo salió mal"}
-                </h2>
-
-                <p className="text-white/70 mb-6">
-                    {msg}
-                </p>
-
-                {status === "approved" && tickets.length > 0 && (
-                    <div className="mb-8 overflow-hidden rounded-xl border border-white/10">
-                        <div className="bg-white/5 p-3 text-sm font-bold text-white uppercase tracking-wider">
-                            Mis Tickets ({tickets.length})
-                        </div>
-                        <div className="bg-black/30 p-4 max-h-48 overflow-y-auto custom-scrollbar grid grid-cols-3 gap-2">
-                            {tickets.map(t => (
-                                <div key={t} className="bg-white/10 rounded p-2 font-mono font-bold text-white text-sm">
-                                    {t}
-                                </div>
-                            ))}
-                        </div>
+            <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="glass-strong p-12 rounded-2xl max-w-lg w-full text-center"
+            >
+                {status === 'loading' && (
+                    <div className="flex flex-col items-center">
+                        <Loader2 className="w-16 h-16 text-white animate-spin mb-6" />
+                        <h2 className="text-2xl font-bold text-white mb-2">Verificando Pago...</h2>
+                        <p className="text-white/70">Por favor espera un momento.</p>
                     </div>
                 )}
 
-                <div className="flex flex-col gap-3">
-                    {status === "approved" && (
+                {status === 'success' && (
+                    <div className="flex flex-col items-center">
+                        <div className="w-24 h-24 bg-gradient-to-r from-green-600 to-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                            <Check className="w-12 h-12 text-white" />
+                        </div>
+                        <h2 className="text-3xl font-bold text-white mb-4">¡Pago Exitoso!</h2>
+                        <p className="text-white/70 mb-8">
+                            Tu compra ha sido confirmada. Hemos enviado los detalles a tu correo electrónico.
+                        </p>
                         <Link
                             href="/"
-                            className="inline-block px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+                            className="px-8 py-3 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform flex items-center gap-2"
                         >
-                            Ver mis tickets / Volver
+                            Volver al Inicio
+                            <ArrowRight className="w-5 h-5" />
                         </Link>
-                    )}
+                    </div>
+                )}
 
-                    {status !== "approved" && status !== "loading" && (
-                        <Link
-                            href="/checkout"
-                            className="inline-block px-8 py-3 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform"
-                        >
-                            Intentar de nuevo
-                        </Link>
-                    )}
-
-                    {status === "approved" && (
-                        <div className="text-xs text-white/40 mt-2">
-                            Hemos enviado los detalles a tu correo.
+                {status === 'error' && (
+                    <div className="flex flex-col items-center">
+                        <div className="w-24 h-24 bg-gradient-to-r from-red-600 to-red-700 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(239,68,68,0.4)]">
+                            <X className="w-12 h-12 text-white" />
                         </div>
-                    )}
-                </div>
-            </div>
+                        <h2 className="text-3xl font-bold text-white mb-4">Pago no completado</h2>
+                        <p className="text-white/70 mb-8">
+                            {message}
+                        </p>
+                        <div className="flex flex-col gap-3 w-full">
+                            <button
+                                onClick={() => router.push('/checkout')}
+                                className="w-full px-8 py-3 bg-gradient-to-r from-orange-500 to-pink-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+                            >
+                                Intentar Nuevamente
+                            </button>
+                            <Link
+                                href="/"
+                                className="text-white/50 hover:text-white text-sm"
+                            >
+                                Cancelar y volver al inicio
+                            </Link>
+                        </div>
+                    </div>
+                )}
+            </motion.div>
         </div>
-    );
-}
-
-export default function PayphoneReturnPage() {
-    return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-white">Cargando...</div>}>
-            <ReturnContent />
-        </Suspense>
     );
 }

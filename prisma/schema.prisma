@@ -16,7 +16,6 @@ model AppState {
   updatedAt DateTime @updatedAt
 }
 
-
 model Analytics {
   id        Int      @id @default(1)
   data      Json
@@ -24,10 +23,10 @@ model Analytics {
 }
 
 enum SaleStatus {
-  PENDING
+  PENDING_PAYMENT
   PAID
   CANCELED
-  FAILED
+  EXPIRED
 }
 
 enum TicketStatus {
@@ -36,27 +35,52 @@ enum TicketStatus {
   SOLD
 }
 
+enum PaymentProvider {
+  PAYPHONE
+}
+
 model Ticket {
-  id              String       @id @default(cuid())
-  number          Int          @unique
-  status          TicketStatus @default(AVAILABLE)
-  reservedUntil   DateTime?
-  reservedBySaleId String?
-  reservedBySale   Sale?        @relation(fields: [reservedBySaleId], references: [id], onDelete: SetNull)
-  saleId          String?
-  sale            Sale?        @relation("SoldTickets", fields: [saleId], references: [id])
+  id            String       @id @default(cuid())
+  number        Int          @unique
+  status        TicketStatus @default(AVAILABLE)
+  reservedUntil DateTime?
+  saleId        String?
+  sale          Sale?        @relation(fields: [saleId], references: [id])
 }
 
 model Sale {
-  id                  String     @id @default(cuid())
-  status              SaleStatus @default(PENDING)
-  amountCents         Int
-  currency            String     @default("USD")
-  payphonePaymentId   String?
-  payphoneClientTxId  String?    @unique
-  personalData        Json?
-  tickets             Ticket[]   @relation("SoldTickets")
-  reservedTickets     Ticket[]
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  status      SaleStatus @default(PENDING_PAYMENT)
+  amountCents Int
+  currency    String     @default("USD")
+
+  // PayPhone specific fields
+  provider            PaymentProvider @default(PAYPHONE)
+  payphonePaymentId   String? // Returned by PayPhone
+  clientTransactionId String          @unique @default(cuid()) // Our unique reference for PayPhone
+
+  confirmedAt DateTime?
+
+  // Customer relation
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  tickets Ticket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id        String @id @default(cuid())
+  idNumber  String @unique // Cédula
+  firstName String
+  lastName  String
+  email     String
+  phone     String
+
+  sales Sale[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

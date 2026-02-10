@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
         const ticketNumbers = tickets.map((t: any) => Number(t));
 
         // 2. Transaction: Verify Availability + Create Customer/Sale + Reserve
-        const result = await prisma.$transaction(async (tx) => {
+        const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Check availability
             const existingTickets = await tx.ticket.findMany({
                 where: {
