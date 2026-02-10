@@ -6,11 +6,11 @@ export async function GET(req: Request) {
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
-    // Hyper-Clean token normalization (Definitive camelCase)
+    // Hyper-Clean token normalization (V2 Patch)
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
     const tokenLimpio = tokenRaw
         .trim()
-        .replace(/^(bearer\s+|Bearer\s+)/i, "") // Radical prefix removal
+        .replace(/^(bearer\s+|Bearer\s+)/i, "")
         .replace(/[\r\n\t\s]+/g, "");
 
     const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
@@ -25,7 +25,8 @@ export async function GET(req: Request) {
         return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: (tokenLimpio || "").length, requestId }, { status: 500 });
     }
 
-    const url = `${baseUrl}/api/button/Prepare`;
+    // V2 Endpoint URL
+    const url = `${baseUrl}/api/v2/Button/Prepare`;
 
     const payload = {
         amount: 100,
@@ -34,10 +35,11 @@ export async function GET(req: Request) {
         tax: 0,
         service: 0,
         tip: 0,
-        clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.slice(0, 50),
+        // Alphanumeric Only
+        clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
         currency: "USD",
         storeId,
-        reference: "TEST YVOSS",
+        reference: "TEST YVOSS V2",
         responseUrl,
         cancellationUrl: cancellationUrl || undefined,
         timeZone: -5,
@@ -55,7 +57,7 @@ export async function GET(req: Request) {
                 "Authorization": `Bearer ${tokenLimpio}`,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "YVossOeee-App/1.0" // Added to avoid bot protection rejection
+                "User-Agent": "PayPhone-SDK-Node/1.0"
             },
             body: JSON.stringify(payload)
         });
@@ -73,10 +75,11 @@ export async function GET(req: Request) {
                 htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare Debug] Server Error:', {
+            console.error('[PayPhone Prepare Debug] V2 Server Error:', {
                 status: res.status,
                 contentType,
-                extract: htmlExtract
+                extract: htmlExtract,
+                url
             });
 
             return Response.json(

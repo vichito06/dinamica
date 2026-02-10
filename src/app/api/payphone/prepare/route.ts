@@ -28,7 +28,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
         }
 
-        // Hyper-Clean token normalization (Definitive camelCase)
+        // Hyper-Clean token normalization (V2 Patch)
         const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
         const tokenLimpio = tokenRaw
             .trim()
@@ -47,7 +47,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Configuración de PayPhone incompleta' }, { status: 500 });
         }
 
-        const url = `${baseUrl}/api/button/Prepare`;
+        // V2 Endpoint URL
+        const url = `${baseUrl}/api/v2/Button/Prepare`;
 
         // Strict calculation (integers only)
         const amount = Math.round(sale.amountCents);
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Payload exactly as per latest docs (camelCase)
+        // Payload for V2 (camelCase + STRICTLY ALPHANUMERIC ID)
         const payload = {
             amount,
             amountWithoutTax,
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
             tax,
             service,
             tip,
-            clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`.slice(0, 50),
+            // Strictly alphanumeric ID (Remove any _ from date/random)
+            clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
             reference: "Compra Dinamica",
             storeId,
             currency: "USD",
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
                 'Authorization': `Bearer ${tokenLimpio}`,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'User-Agent': 'YVossOeee-App/1.0' // Added to avoid bot protection rejection
+                'User-Agent': 'PayPhone-SDK-Node/1.0' // Added to avoid bot protection rejection
             },
             body: JSON.stringify(payload)
         });
@@ -105,10 +107,11 @@ export async function POST(request: Request) {
                 htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare] Server Error:', {
+            console.error('[PayPhone Prepare] V2 Server Error:', {
                 status: response.status,
                 contentType,
-                extract: htmlExtract
+                extract: htmlExtract,
+                url
             });
 
             return NextResponse.json({
