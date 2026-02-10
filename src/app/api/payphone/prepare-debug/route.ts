@@ -17,12 +17,12 @@ export async function GET(req: Request) {
     const token = process.env.PAYPHONE_TOKEN;
     const storeId = process.env.PAYPHONE_STORE_ID;
 
-    // Check minimal requirements for the call
     if (!token || !storeId) {
         return Response.json({ ok: false, code: "MISSING_PAYPHONE_CONFIG", requestId }, { status: 500 });
     }
 
-    const url = "https://pay.payphonetodoesposible.com/api/button/Prepare";
+    const baseUrl = process.env.PAYPHONE_BASE_URL || "https://pay.payphonetodoesposible.com";
+    const endpoint = "/api/button/Prepare";
 
     const payload = {
         amount: 100, // 100 cents = $1.00 for stable testing
@@ -32,24 +32,27 @@ export async function GET(req: Request) {
         service: 0,
         tip: 0,
         currency: "USD",
-        reference: "DEBUG-TEST",
+        reference: "DEBUG-TEST-V2",
         clientTransactionId: `DEBUG-${Date.now()}`,
-        // Using provided storeId or fallback to env if passed
-        storeId: process.env.PAYPHONE_STORE_ID,
+        storeId: storeId,
         responseUrl: process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return",
         cancellationUrl: process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel",
-        ...((req as any).body || {}) // Allow overriding for debug if needed, but safe defaults first
+        timeZone: -5
     };
 
+    // Format Authorization Header
+    const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+
     try {
-        const r = await fetch(url, {
+        const r = await fetch(`${baseUrl}${endpoint}`, {
             method: "POST",
             headers: {
+                "Authorization": authHeader,
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`,
+                "Accept": "application/json",
                 "Origin": "https://yvossoeee.com",
                 "Referer": "https://yvossoeee.com/",
-                "User-Agent": "YVossOeee-Backend/Debug"
+                "User-Agent": "YVossOeee-Backend/Debug-V2"
             },
             body: JSON.stringify(payload)
         });
@@ -57,15 +60,16 @@ export async function GET(req: Request) {
         const raw = await r.text();
         const ct = r.headers.get("content-type") || "";
 
-        // Try parse
         let data: any;
         try {
             data = JSON.parse(raw);
         } catch {
+            console.error('[PayPhone Prepare Debug] Non-JSON response:', raw.slice(0, 500));
             return Response.json({
                 ok: false,
                 code: "PAYPHONE_NON_JSON",
                 status: r.status,
+                contentType: ct,
                 bodySnippet: raw.slice(0, 500),
                 requestId
             }, { status: 502 });
@@ -76,13 +80,11 @@ export async function GET(req: Request) {
                 ok: false,
                 code: "PAYPHONE_UPSTREAM_ERROR",
                 status: r.status,
-                bodySnippet: data,
+                details: data,
                 requestId
             }, { status: 502 });
         }
 
-        // Extract URL
-        // PayPhone usually returns `payWithCard`. I will check multiple fields as requested.
         const foundUrl = data.payWithCard || data.url || data.paymentUrl || data.link || data.redirectUrl || null;
 
         return Response.json({
@@ -91,10 +93,7 @@ export async function GET(req: Request) {
             status: r.status,
             rawKeys: Object.keys(data),
             url: foundUrl,
-            // Include full data for debug if needed, but user asked for specific fields. 
-            // "ok:true, requestId, status:res.status, rawKeys:[...], url:<campo url encontrado o null>"
-            // I will include bodySnippet just in case
-            bodySnippet: data
+            details: data
         });
 
     } catch (e: any) {

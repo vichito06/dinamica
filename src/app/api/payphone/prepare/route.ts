@@ -45,20 +45,30 @@ export async function POST(request: Request) {
 
         // Prepare PayPhone request
         const payPhoneToken = process.env.PAYPHONE_TOKEN;
-        if (!payPhoneToken) {
-            console.error('Missing PAYPHONE_TOKEN env var');
+        const storeId = process.env.PAYPHONE_STORE_ID;
+        if (!payPhoneToken || !storeId) {
+            console.error('Missing PayPhone configuration (TOKEN/STORE_ID)');
             return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
         }
+
+        const baseUrl = process.env.PAYPHONE_BASE_URL || 'https://pay.payphonetodoesposible.com';
+        const endpoint = '/api/button/Prepare';
 
         const payload = {
             amount: sale.amountCents,
             amountWithoutTax: sale.amountCents,
-            currency: sale.currency, // e.g. "USD"
+            amountWithTax: 0,
+            tax: 0,
+            service: 0,
+            tip: 0,
+            currency: "USD",
+            reference: `Venta Dinamica #${sale.id.slice(-6)}`,
             clientTransactionId: sale.clientTransactionId,
-            responseUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/payphone/return`,
-            cancellationUrl: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/payphone/cancel`,
+            storeId: storeId,
+            responseUrl: process.env.PAYPHONE_RESPONSE_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/return`,
+            cancellationUrl: process.env.PAYPHONE_CANCEL_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/cancel`,
+            timeZone: -5,
             // Optional fields
-            details: `Compra de tickets: ${sale.tickets.map(t => t.number).join(', ')}`,
             email: sale.customer.email,
             phoneNumber: sale.customer.phone,
             documentId: sale.customer.idNumber,
@@ -66,23 +76,33 @@ export async function POST(request: Request) {
 
         console.log('[PayPhone Prepare] Payload:', JSON.stringify(payload));
 
-        const response = await fetch('https://pay.payphonetodoesposible.com/api/button/Prepare', {
+        // Format Authorization Header
+        const authHeader = payPhoneToken.startsWith('Bearer ') ? payPhoneToken : `Bearer ${payPhoneToken}`;
+
+        const response = await fetch(`${baseUrl}${endpoint}`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${payPhoneToken}`,
-                'Content-Type': 'application/json'
+                'Authorization': authHeader,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify(payload)
         });
 
         const responseText = await response.text();
-        let responseData;
+        const contentType = response.headers.get('content-type') || '';
 
+        let responseData;
         try {
             responseData = JSON.parse(responseText);
         } catch (e) {
-            console.error('[PayPhone Prepare] Non-JSON response:', responseText);
-            return NextResponse.json({ error: 'Upstream provider error (Non-JSON)' }, { status: 502 });
+            console.error('[PayPhone Prepare] Non-JSON response:', responseText.slice(0, 500));
+            return NextResponse.json({
+                error: 'PAYPHONE_NON_JSON',
+                status: response.status,
+                contentType,
+                bodySnippet: responseText.slice(0, 500)
+            }, { status: 502 });
         }
 
         if (!response.ok) {
@@ -90,8 +110,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Payment provider error', details: responseData }, { status: 502 });
         }
 
-        // According to PayPhone docs, response contains paymentId and payWithCard url
-        // Look for paymentId to store if needed
         if (responseData.paymentId) {
             await prisma.sale.update({
                 where: { id: sale.id },
@@ -100,7 +118,7 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({
-            redirectUrl: responseData.payWithCard, // usage preference as per requirement
+            redirectUrl: responseData.payWithCard || responseData.url,
             paymentId: responseData.paymentId
         });
 
