@@ -25,8 +25,8 @@ export async function GET(req: Request) {
         return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: (tokenLimpio || "").length, requestId }, { status: 500 });
     }
 
-    // V2 Endpoint URL
-    const url = `${baseUrl}/api/v2/Button/Prepare`;
+    // Correct V2 Endpoint URL
+    const url = `${baseUrl}/api/button/V2/Prepare`;
 
     const payload = {
         amount: 100,

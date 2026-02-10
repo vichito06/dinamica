@@ -47,8 +47,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Configuración de PayPhone incompleta' }, { status: 500 });
         }
 
-        // V2 Endpoint URL
-        const url = `${baseUrl}/api/v2/Button/Prepare`;
+        // Correct V2 Endpoint URL
+        const url = `${baseUrl}/api/button/V2/Prepare`;
 
         // Strict calculation (integers only)
         const amount = Math.round(sale.amountCents);
