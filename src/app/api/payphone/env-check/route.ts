@@ -1,13 +1,8 @@
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+import { requirePayphoneTestSecret } from "@/lib/payphone-auth";
 
 export async function GET(req: Request) {
-    const secret = req.headers.get("x-test-secret");
-    const expectedSecret = process.env.PAYPHONE_TEST_SECRET;
-
-    if (!expectedSecret || secret !== expectedSecret) {
-        return Response.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const auth = requirePayphoneTestSecret(req);
+    if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
     const keysToCheck = [
         "PAYPHONE_TOKEN",

@@ -1,18 +1,12 @@
 export const runtime = "nodejs";
+import { requirePayphoneTestSecret } from "@/lib/payphone-auth";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
     const requestId = crypto.randomUUID();
 
-    const envSecret = process.env.TEST_SECRET;
-    if (!envSecret) {
-        return Response.json({ ok: false, code: "MISSING_TEST_SECRET", requestId }, { status: 500 });
-    }
-
-    const headerSecret = req.headers.get("x-test-secret");
-    if (headerSecret !== envSecret) {
-        return Response.json({ ok: false, code: "UNAUTHORIZED", requestId }, { status: 401 });
-    }
+    const auth = requirePayphoneTestSecret(req);
+    if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
     // Exact PayPhone configuration from user requirements
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";

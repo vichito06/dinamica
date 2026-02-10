@@ -1,25 +1,11 @@
+import { requirePayphoneTestSecret } from "@/lib/payphone-auth";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-    const secret = req.headers.get("x-test-secret");
-    const expected = process.env.TEST_SECRET;
-
-    // 1. Si no hay TEST_SECRET configurado en Vercel, falla seguro (500)
-    if (!expected) {
-        return Response.json(
-            { ok: false, error: "TEST_SECRET missing in environment" },
-            { status: 500 }
-        );
-    }
-
-    // 2. Si el header no coincide (o falta), 401 JSON
-    if (secret !== expected) {
-        return Response.json(
-            { ok: false, error: "Unauthorized" },
-            { status: 401 }
-        );
-    }
+    const auth = requirePayphoneTestSecret(req);
+    if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
     // 3. Todo OK
     const envs = {
