@@ -25,28 +25,26 @@ export async function GET(req: Request) {
         return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: (tokenLimpio || "").length, requestId }, { status: 500 });
     }
 
-    // Correct V2 Endpoint URL
-    const url = `${baseUrl}/api/button/V2/Prepare`;
+    // Standard Endpoint URL (Minimalist)
+    const url = `${baseUrl}/api/button/Prepare`;
 
     const payload = {
         amount: 100,
         amountWithoutTax: 100,
         amountWithTax: 0,
-        taxes: 0, // Plural mandatory
+        tax: 0,
         service: 0,
         tip: 0,
-        clientTransactionID: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
+        clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
         currency: "USD",
-        storeID: storeId,
-        reference: "TEST YVOSS V2",
-        responseURL: responseUrl,
-        cancellationURL: cancellationUrl || undefined,
-        timeZone: -5,
-        lat: "0.0",
-        lng: "0.0"
+        storeId,
+        reference: "TEST YVOSS MINIMALIST",
+        responseUrl,
+        cancellationUrl: cancellationUrl || undefined
+        // Optional lat, lng, timeZone omitted for stability
     };
 
-    console.log('[PayPhone Prepare Debug] Requesting:', url);
+    console.log('[PayPhone Prepare Debug] Requesting Minimalist:', url);
 
     try {
         const res = await fetch(url, {
@@ -74,7 +72,7 @@ export async function GET(req: Request) {
                 htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare Debug] V2 Server Error:', {
+            console.error('[PayPhone Prepare Debug] Minimalist Server Error:', {
                 status: res.status,
                 contentType,
                 extract: htmlExtract,

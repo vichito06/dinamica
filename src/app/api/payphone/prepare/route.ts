@@ -47,8 +47,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Configuración de PayPhone incompleta' }, { status: 500 });
         }
 
-        // Correct V2 Endpoint URL
-        const url = `${baseUrl}/api/button/V2/Prepare`;
+        // Standard Endpoint URL (Minimalist)
+        const url = `${baseUrl}/api/button/Prepare`;
 
         // Strict calculation (integers only)
         const amount = Math.round(sale.amountCents);
@@ -62,33 +62,30 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Payload for V2 (Acronym-Case + Plural Taxes)
+        // Minimalist Payload (Standard camelCase)
         const payload = {
             amount,
             amountWithoutTax,
             amountWithTax,
-            taxes: 0, // Plural mandatory
-            service: 0,
-            tip: 0,
-            clientTransactionID: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
+            tax,
+            service,
+            tip,
+            clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
             reference: "Compra Dinamica",
-            storeID: storeId,
+            storeId,
             currency: "USD",
-            responseURL: responseUrl,
-            cancellationURL: cancellationUrl || undefined,
-            timeZone: -5,
-            lat: "0.0",
-            lng: "0.0"
+            responseUrl,
+            cancellationUrl: cancellationUrl || undefined
+            // Optional lat, lng, timeZone omitted for stability
         };
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                // Using standard "Bearer" (Uppercase) which PayPhone's IIS server often requires
                 'Authorization': `Bearer ${tokenLimpio}`,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
-                'User-Agent': 'PayPhone-SDK-Node/1.0' // Added to avoid bot protection rejection
+                'User-Agent': 'PayPhone-SDK-Node/1.0'
             },
             body: JSON.stringify(payload)
         });
@@ -97,7 +94,7 @@ export async function POST(request: Request) {
         const contentType = response.headers.get('content-type') || '';
 
         if (!response.ok || !contentType.includes('application/json')) {
-            // Precise diagnosis for HTML errors (catching common IIS error tags)
+            // Precise diagnosis for HTML errors
             let htmlExtract = "";
             if (contentType.includes('text/html')) {
                 const h1 = responseText.match(/<h1>(.*?)<\/h1>/i)?.[1];
@@ -106,7 +103,7 @@ export async function POST(request: Request) {
                 htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare] V2 Server Error:', {
+            console.error('[PayPhone Prepare] Minimalist Server Error:', {
                 status: response.status,
                 contentType,
                 extract: htmlExtract,
@@ -120,6 +117,7 @@ export async function POST(request: Request) {
                 contentType,
                 htmlExtract,
                 endpoint: url,
+                payloadSent: { ...payload, storeId: 'HIDDEN' },
                 bodySnippet: responseText.slice(0, 5000)
             }, { status: 502 });
         }
