@@ -43,46 +43,63 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Tickets expired or invalid' }, { status: 409 });
         }
 
-        // Prepare PayPhone request
-        const payPhoneToken = process.env.PAYPHONE_TOKEN;
-        const storeId = process.env.PAYPHONE_STORE_ID;
-        if (!payPhoneToken || !storeId) {
-            console.error('Missing PayPhone configuration (TOKEN/STORE_ID)');
-            return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
+        // Exact PayPhone configuration from user requirements
+        const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
+        const token = tokenRaw.replace(/\s+/g, ""); // Remove all whitespace/newlines
+
+        const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
+        const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
+            .trim()
+            .replace(/\/+$/, "");
+
+        const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/return`).trim();
+        const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/cancel`).trim();
+
+        if (!token || !storeId || !responseUrl) {
+            console.error('[PayPhone Prepare] Missing required environment variables');
+            return NextResponse.json({ error: 'Configuración de PayPhone incompleta', details: 'Faltan variables de entorno' }, { status: 500 });
         }
 
-        const baseUrl = process.env.PAYPHONE_BASE_URL || 'https://pay.payphonetodoesposible.com';
-        const endpoint = '/api/button/Prepare';
+        const url = `${baseUrl}/api/button/Prepare`;
+
+        // Strict calculation
+        const amount = sale.amountCents;
+        const amountWithoutTax = amount;
+        const amountWithTax = 0;
+        const tax = 0;
+        const service = 0;
+        const tip = 0;
+
+        // Verify sum rule: amount = amountWithoutTax + amountWithTax + tax + service + tip
+        if (amount !== (amountWithoutTax + amountWithTax + tax + service + tip)) {
+            return NextResponse.json({ error: 'Mismatch in amount calculation logic' }, { status: 400 });
+        }
 
         const payload = {
-            amount: sale.amountCents,
-            amountWithoutTax: sale.amountCents,
-            amountWithTax: 0,
-            tax: 0,
-            service: 0,
-            tip: 0,
-            currency: "USD",
+            amount,
+            amountWithoutTax,
+            amountWithTax,
+            tax,
+            service,
+            tip,
+            clientTransactionId: String(sale.clientTransactionId),
             reference: `Venta Dinamica #${sale.id.slice(-6)}`,
-            clientTransactionId: sale.clientTransactionId,
-            storeId: storeId,
-            responseUrl: process.env.PAYPHONE_RESPONSE_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/return`,
-            cancellationUrl: process.env.PAYPHONE_CANCEL_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/cancel`,
+            storeId,
+            currency: "USD",
+            responseUrl,
+            cancellationUrl: cancellationUrl || undefined,
             timeZone: -5,
-            // Optional fields
-            email: sale.customer.email,
-            phoneNumber: sale.customer.phone,
-            documentId: sale.customer.idNumber,
+            // User requested lat/lng to avoid possible validation issues
+            lat: "-0.1807",
+            lng: "-78.4678"
         };
 
-        console.log('[PayPhone Prepare] Payload:', JSON.stringify(payload));
+        console.log('[PayPhone Prepare] Requesting:', url);
 
-        // Format Authorization Header
-        const authHeader = payPhoneToken.startsWith('Bearer ') ? payPhoneToken : `Bearer ${payPhoneToken}`;
-
-        const response = await fetch(`${baseUrl}${endpoint}`, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': authHeader,
+                'Authorization': `Bearer ${token}`, // One single line, clean token
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
@@ -92,23 +109,29 @@ export async function POST(request: Request) {
         const responseText = await response.text();
         const contentType = response.headers.get('content-type') || '';
 
-        let responseData;
-        try {
-            responseData = JSON.parse(responseText);
-        } catch (e) {
-            console.error('[PayPhone Prepare] Non-JSON response:', responseText.slice(0, 500));
+        if (!response.ok) {
+            console.error('[PayPhone Prepare] Error:', response.status, responseText.slice(0, 800));
+            return NextResponse.json({
+                error: 'PAYPHONE_UPSTREAM_ERROR',
+                status: response.status,
+                contentType,
+                endpoint: url,
+                bodySnippet: responseText.slice(0, 800)
+            }, { status: 502 });
+        }
+
+        if (!contentType.includes('application/json')) {
+            console.error('[PayPhone Prepare] Non-JSON response received');
             return NextResponse.json({
                 error: 'PAYPHONE_NON_JSON',
                 status: response.status,
                 contentType,
-                bodySnippet: responseText.slice(0, 500)
+                endpoint: url,
+                bodySnippet: responseText.slice(0, 800)
             }, { status: 502 });
         }
 
-        if (!response.ok) {
-            console.error('[PayPhone Prepare] Error:', response.status, responseData);
-            return NextResponse.json({ error: 'Payment provider error', details: responseData }, { status: 502 });
-        }
+        const responseData = JSON.parse(responseText);
 
         if (responseData.paymentId) {
             await prisma.sale.update({
@@ -124,6 +147,6 @@ export async function POST(request: Request) {
 
     } catch (error: any) {
         console.error('[PayPhone Prepare] Exception:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
     }
 }

@@ -14,89 +14,89 @@ export async function GET(req: Request) {
         return Response.json({ ok: false, code: "UNAUTHORIZED", requestId }, { status: 401 });
     }
 
-    const token = process.env.PAYPHONE_TOKEN;
-    const storeId = process.env.PAYPHONE_STORE_ID;
+    // Exact PayPhone configuration from user requirements
+    const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
+    const token = tokenRaw.replace(/\s+/g, ""); // Remove all whitespace/newlines
 
-    if (!token || !storeId) {
-        return Response.json({ ok: false, code: "MISSING_PAYPHONE_CONFIG", requestId }, { status: 500 });
+    const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
+    const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
+        .trim()
+        .replace(/\/+$/, "");
+
+    const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return").trim();
+    const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel").trim();
+
+    if (!token || !storeId || !responseUrl) {
+        return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: token.length, requestId }, { status: 500 });
     }
 
-    const baseUrl = process.env.PAYPHONE_BASE_URL || "https://pay.payphonetodoesposible.com";
-    const endpoint = "/api/button/Prepare";
+    const url = `${baseUrl}/api/button/Prepare`;
+
+    const clientTransactionId = `YVOSS-DEBUG-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
     const payload = {
-        amount: 100, // 100 cents = $1.00 for stable testing
+        amount: 100,
         amountWithoutTax: 100,
         amountWithTax: 0,
         tax: 0,
         service: 0,
         tip: 0,
+        clientTransactionId,
+        reference: "TEST YVOSS DEBUG",
+        storeId,
         currency: "USD",
-        reference: "DEBUG-TEST-V2",
-        clientTransactionId: `DEBUG-${Date.now()}`,
-        storeId: storeId,
-        responseUrl: process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return",
-        cancellationUrl: process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel",
-        timeZone: -5
+        responseUrl,
+        cancellationUrl: cancellationUrl || undefined,
+        timeZone: -5,
+        // User requested lat/lng to avoid possible validation issues
+        lat: "-0.1807",
+        lng: "-78.4678"
     };
 
-    // Format Authorization Header
-    const authHeader = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
+    console.log('[PayPhone Prepare Debug] Requesting:', url);
 
     try {
-        const r = await fetch(`${baseUrl}${endpoint}`, {
+        const res = await fetch(url, {
             method: "POST",
             headers: {
-                "Authorization": authHeader,
+                "Authorization": `Bearer ${token}`, // One single line
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "Origin": "https://yvossoeee.com",
-                "Referer": "https://yvossoeee.com/",
-                "User-Agent": "YVossOeee-Backend/Debug-V2"
+                "User-Agent": "YVossOeee-Backend/Debug-V3"
             },
             body: JSON.stringify(payload)
         });
 
-        const raw = await r.text();
-        const ct = r.headers.get("content-type") || "";
+        const raw = await res.text();
+        const contentType = res.headers.get("content-type") || "";
 
-        let data: any;
-        try {
-            data = JSON.parse(raw);
-        } catch {
-            console.error('[PayPhone Prepare Debug] Non-JSON response:', raw.slice(0, 500));
-            return Response.json({
-                ok: false,
-                code: "PAYPHONE_NON_JSON",
-                status: r.status,
-                contentType: ct,
-                bodySnippet: raw.slice(0, 500),
-                requestId
-            }, { status: 502 });
+        if (!res.ok) {
+            console.error('[PayPhone Prepare Debug] Error:', res.status, raw.slice(0, 800));
+            return Response.json(
+                { ok: false, upstreamStatus: res.status, contentType, endpoint: url, bodySnippet: raw.slice(0, 800), requestId },
+                { status: 502 }
+            );
         }
 
-        if (!r.ok) {
-            return Response.json({
-                ok: false,
-                code: "PAYPHONE_UPSTREAM_ERROR",
-                status: r.status,
-                details: data,
-                requestId
-            }, { status: 502 });
+        if (!contentType.includes("application/json")) {
+            console.error('[PayPhone Prepare Debug] Non-JSON response received');
+            return Response.json(
+                { ok: false, code: "PAYPHONE_NON_JSON", upstreamStatus: res.status, contentType, endpoint: url, bodySnippet: raw.slice(0, 800), requestId },
+                { status: 502 }
+            );
         }
 
-        const foundUrl = data.payWithCard || data.url || data.paymentUrl || data.link || data.redirectUrl || null;
-
+        const data = JSON.parse(raw);
         return Response.json({
             ok: true,
             requestId,
-            status: r.status,
-            rawKeys: Object.keys(data),
-            url: foundUrl,
+            status: res.status,
+            url: data.payWithCard || data.url,
             details: data
         });
 
     } catch (e: any) {
+        console.error('[PayPhone Prepare Debug] Exception:', e);
         return Response.json({
             ok: false,
             code: "INTERNAL_ERROR",
