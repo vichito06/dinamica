@@ -6,11 +6,11 @@ export async function GET(req: Request) {
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
-    // Hyper-Clean token normalization
+    // Hyper-Clean token normalization (camelCase Revert)
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
-    const token = tokenRaw
+    const tokenLimpio = tokenRaw
         .trim()
-        .replace(/^bearer\s+/i, "") // Remove prefix if it accidentally exists in env
+        .replace(/^bearer\s+/i, "") // Remove 'Bearer ' or 'bearer '
         .replace(/[\r\n\t\s]+/g, "");
 
     const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
@@ -21,26 +21,26 @@ export async function GET(req: Request) {
     const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return").trim();
     const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel").trim();
 
-    if (!token || !storeId || !responseUrl) {
-        return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: token.length, requestId }, { status: 500 });
+    if (!tokenLimpio || !storeId || !responseUrl) {
+        return Response.json({ ok: false, error: "Missing PayPhone env", tokenLen: tokenLimpio.length, requestId }, { status: 500 });
     }
 
     const url = `${baseUrl}/api/button/Prepare`;
 
     const payload = {
-        Amount: 100,
-        AmountWithoutTax: 100,
-        AmountWithTax: 0,
-        Tax: 0,
-        Service: 0,
-        Tip: 0,
-        ClientTransactionId: `YVOSSDEBUG${Date.now()}`.slice(0, 50),
-        Currency: "USD",
-        StoreId: storeId,
-        Reference: "Compra Test",
-        ResponseUrl: responseUrl,
-        CancellationUrl: cancellationUrl || undefined,
-        TimeZone: -5
+        amount: 100,
+        amountWithoutTax: 100,
+        amountWithTax: 0,
+        tax: 0,
+        service: 0,
+        tip: 0,
+        clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        currency: "USD",
+        storeId,
+        reference: "TEST YVOSS",
+        responseUrl,
+        cancellationUrl: cancellationUrl || undefined,
+        timeZone: -5
     };
 
     console.log('[PayPhone Prepare Debug] Requesting:', url);
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
         const res = await fetch(url, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${token}`, // Standard uppercase
+                "Authorization": `bearer ${tokenLimpio}`, // strictly lowercase
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             },
@@ -65,8 +65,8 @@ export async function GET(req: Request) {
             if (contentType.includes('text/html')) {
                 const h1 = raw.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = raw.match(/<h2>(.*?)<\/h2>/i)?.[1];
-                const pre = raw.match(/<pre>([\s\S]*?)<\/pre>/i)?.[1];
-                htmlExtract = (h1 || h2 || pre || "No specific error found in HTML").trim();
+                const desc = raw.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
+                htmlExtract = (h1 || h2 || desc || "No specific error found in HTML").trim();
             }
 
             console.error('[PayPhone Prepare Debug] Server Error:', {
@@ -83,6 +83,7 @@ export async function GET(req: Request) {
                     contentType,
                     htmlExtract,
                     endpoint: url,
+                    payloadSent: { ...payload, storeId: 'HIDDEN' },
                     bodySnippet: raw.slice(0, 5000),
                     requestId
                 },
@@ -93,10 +94,9 @@ export async function GET(req: Request) {
         const data = JSON.parse(raw);
         return Response.json({
             ok: true,
-            requestId,
-            status: res.status,
-            url: data.payWithCard || data.url,
-            details: data
+            endpoint: url,
+            payloadSent: { ...payload, storeId: 'HIDDEN' },
+            payphoneResponse: data
         });
 
     } catch (e: any) {

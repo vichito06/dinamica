@@ -28,11 +28,11 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
         }
 
-        // Hyper-Clean token normalization
+        // Hyper-Clean token normalization (camelCase Revert)
         const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
-        const token = tokenRaw
+        const tokenLimpio = tokenRaw
             .trim()
-            .replace(/^bearer\s+/i, "") // Remove prefix if it accidentally exists in env
+            .replace(/^bearer\s+/i, "") // Remove 'Bearer ' or 'bearer '
             .replace(/[\r\n\t\s]+/g, "");
 
         const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
@@ -40,10 +40,10 @@ export async function POST(request: Request) {
             .trim()
             .replace(/\/+$/, "");
 
-        const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/return`).trim();
-        const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || `${process.env.NEXT_PUBLIC_APP_URL || 'https://yvossoeee.com'}/payphone/cancel`).trim();
+        const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return").trim();
+        const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel").trim();
 
-        if (!token || !storeId || !responseUrl) {
+        if (!tokenLimpio || !storeId || !responseUrl) {
             return NextResponse.json({ error: 'Configuración de PayPhone incompleta' }, { status: 500 });
         }
 
@@ -61,27 +61,27 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Minimalist payload with PascalCase keys and Alphanumeric-Only ID
+        // Payload EXACTLY as requested (camelCase)
         const payload = {
-            Amount: amount,
-            AmountWithoutTax: amountWithoutTax,
-            AmountWithTax: amountWithTax,
-            Tax: tax,
-            Service: service,
-            Tip: tip,
-            ClientTransactionId: `YVOSS${Date.now()}${sale.id.slice(-4)}`.slice(0, 50),
-            Reference: "Compra",
-            StoreId: storeId,
-            Currency: "USD",
-            ResponseUrl: responseUrl,
-            CancellationUrl: cancellationUrl || undefined,
-            TimeZone: -5
+            amount,
+            amountWithoutTax,
+            amountWithTax,
+            tax,
+            service,
+            tip,
+            clientTransactionId: `YVOSS_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            reference: "Compra",
+            storeId,
+            currency: "USD",
+            responseUrl,
+            cancellationUrl: cancellationUrl || undefined,
+            timeZone: -5
         };
 
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`, // Standard uppercase
+                'Authorization': `bearer ${tokenLimpio}`, // strictly lowercase
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
             if (contentType.includes('text/html')) {
                 const h1 = responseText.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = responseText.match(/<h2>(.*?)<\/h2>/i)?.[1];
-                const pre = responseText.match(/<pre>([\s\S]*?)<\/pre>/i)?.[1];
-                htmlExtract = (h1 || h2 || pre || "No specific error found in HTML").trim();
+                const desc = responseText.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
+                htmlExtract = (h1 || h2 || desc || "No specific error found in HTML").trim();
             }
 
             console.error('[PayPhone Prepare] Server Error:', {
