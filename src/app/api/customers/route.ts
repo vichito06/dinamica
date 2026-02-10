@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { SaleStatus } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,7 @@ export async function GET() {
 
         // Calculate stats for each customer
         const formattedCustomers = customers.map(c => {
-            const paidSales = c.sales.filter(s => s.status === 'PAID' || s.status === 'PENDING_PAYMENT');
+            const paidSales = c.sales.filter(s => s.status === SaleStatus.PAID || s.status === SaleStatus.PENDING_PAYMENT);
             // In admin, we might want to see all sales, or just paid? 
             // Usually "Ventas" implies success or at least intent. 
             // Let's include all non-canceled/expired for stats to match "active" view, 
@@ -26,7 +27,7 @@ export async function GET() {
             // Let's stick to PAID for "Total" and "Tickets", but maybe show pending in a separate way?
             // For simplicity and "real money", let's count PAID.
 
-            const realSales = c.sales.filter(s => s.status === 'PAID');
+            const realSales = c.sales.filter(s => s.status === SaleStatus.PAID);
 
             const totalCents = realSales.reduce((sum, sale) => sum + sale.amountCents, 0);
             const totalTickets = realSales.reduce((sum, sale) => sum + sale.tickets.length, 0);

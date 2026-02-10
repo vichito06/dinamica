@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { Prisma, SaleStatus } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -58,13 +58,13 @@ export async function POST(request: Request) {
                     lastName: personalData.lastName?.toUpperCase(),
                     email: personalData.email,
                     phone: personalData.phone,
-                }
+                },
             });
 
             // Create Sale linked to Customer
             const sale = await tx.sale.create({
                 data: {
-                    status: 'PENDING_PAYMENT',
+                    status: SaleStatus.PENDING_PAYMENT,
                     amountCents: Math.round(Number(total) * 100),
                     currency: 'USD',
                     customerId: customer.id,

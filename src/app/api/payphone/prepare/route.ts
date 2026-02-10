@@ -1,8 +1,10 @@
 
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { SaleStatus } from "@prisma/client";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
     try {
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
         }
 
-        if (sale.status !== 'PENDING_PAYMENT') {
+        if (sale.status !== SaleStatus.PENDING_PAYMENT) {
             return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
         }
 

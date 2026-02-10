@@ -1,6 +1,6 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { SaleStatus, TicketStatus } from '@prisma/client';
 
 export const runtime = 'nodejs';
 
@@ -73,13 +73,13 @@ async function confirmSale(clientTxId: string, payphoneData: any) {
 
         if (!sale) return;
 
-        if (sale.status === 'PAID') return; // Already paid
+        if (sale.status === SaleStatus.PAID) return; // Already paid
 
         // Update Sale
         await tx.sale.update({
             where: { id: sale.id },
             data: {
-                status: 'PAID',
+                status: SaleStatus.PAID,
                 payphonePaymentId: String(payphoneData.transactionId || payphoneData.id), // PayPhone returns id or transactionId? Verify docs or response
                 confirmedAt: new Date(),
             }
@@ -89,7 +89,7 @@ async function confirmSale(clientTxId: string, payphoneData: any) {
         for (const t of sale.tickets) {
             await tx.ticket.update({
                 where: { id: t.id },
-                data: { status: 'SOLD' }
+                data: { status: TicketStatus.SOLD }
             });
         }
     });
@@ -103,12 +103,12 @@ async function handleCancellation(clientTxId: string) {
         });
 
         if (!sale) return;
-        if (sale.status === 'PAID') return; // Don't cancel if already paid (race condition)
+        if (sale.status === SaleStatus.PAID) return; // Don't cancel if already paid (race condition)
 
         // Update Sale
         await tx.sale.update({
             where: { id: sale.id },
-            data: { status: 'CANCELED' }
+            data: { status: SaleStatus.CANCELED }
         });
 
         // Release Tickets
@@ -116,7 +116,7 @@ async function handleCancellation(clientTxId: string) {
             await tx.ticket.update({
                 where: { id: t.id },
                 data: {
-                    status: 'AVAILABLE',
+                    status: TicketStatus.AVAILABLE,
                     saleId: null,
                     reservedUntil: null
                 }

@@ -1,6 +1,6 @@
-
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { SaleStatus, TicketStatus } from '@prisma/client';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         // Find expired tickets that are RESERVED
         const expiredTickets = await prisma.ticket.findMany({
             where: {
-                status: 'RESERVED',
+                status: TicketStatus.RESERVED,
                 reservedUntil: { lt: now }
             },
             include: { sale: true }
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
                     id: { in: expiredTickets.map(t => t.id) }
                 },
                 data: {
-                    status: 'AVAILABLE',
+                    status: TicketStatus.AVAILABLE,
                     reservedUntil: null,
                     saleId: null
                 }
@@ -51,10 +51,10 @@ export async function GET(request: Request) {
             await tx.sale.updateMany({
                 where: {
                     id: { in: expiredSaleIds },
-                    status: 'PENDING_PAYMENT'
+                    status: SaleStatus.PENDING_PAYMENT
                 },
                 data: {
-                    status: 'EXPIRED'
+                    status: SaleStatus.EXPIRED
                 }
             });
         });
