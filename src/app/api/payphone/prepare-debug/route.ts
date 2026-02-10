@@ -28,19 +28,19 @@ export async function GET(req: Request) {
     const url = `${baseUrl}/api/button/Prepare`;
 
     const payload = {
-        amount: 100,
-        amountWithoutTax: 100,
-        amountWithTax: 0,
-        tax: 0,
-        service: 0,
-        tip: 0,
-        clientTransactionId: `YVOSSDEBUG${Date.now()}`, // Alphanumeric only
-        reference: "Compra Test",
-        storeId,
-        currency: "USD",
-        responseUrl,
-        cancellationUrl: cancellationUrl || undefined,
-        timeZone: -5
+        Amount: 100,
+        AmountWithoutTax: 100,
+        AmountWithTax: 0,
+        Tax: 0,
+        Service: 0,
+        Tip: 0,
+        ClientTransactionId: `YVOSSDEBUG${Date.now()}`.slice(0, 50),
+        Currency: "USD",
+        StoreId: storeId,
+        Reference: "Compra Test",
+        ResponseUrl: responseUrl,
+        CancellationUrl: cancellationUrl || undefined,
+        TimeZone: -5
     };
 
     console.log('[PayPhone Prepare Debug] Requesting:', url);

@@ -61,21 +61,21 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Minimalist payload with Alphanumeric-Only ID
+        // Minimalist payload with PascalCase keys and Alphanumeric-Only ID
         const payload = {
-            amount,
-            amountWithoutTax,
-            amountWithTax,
-            tax,
-            service,
-            tip,
-            clientTransactionId: `YVOSS${Date.now()}${sale.id.slice(-4)}`, // Alphanumeric only
-            reference: "Compra",
-            storeId,
-            currency: "USD",
-            responseUrl,
-            cancellationUrl: cancellationUrl || undefined,
-            timeZone: -5
+            Amount: amount,
+            AmountWithoutTax: amountWithoutTax,
+            AmountWithTax: amountWithTax,
+            Tax: tax,
+            Service: service,
+            Tip: tip,
+            ClientTransactionId: `YVOSS${Date.now()}${sale.id.slice(-4)}`.slice(0, 50),
+            Reference: "Compra",
+            StoreId: storeId,
+            Currency: "USD",
+            ResponseUrl: responseUrl,
+            CancellationUrl: cancellationUrl || undefined,
+            TimeZone: -5
         };
 
         const response = await fetch(url, {
