@@ -6,9 +6,12 @@ export async function GET(req: Request) {
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
-    // Radical token cleaning
+    // Hyper-Clean token normalization
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
-    const token = tokenRaw.replace(/[\r\n\t\s]+/g, "");
+    const token = tokenRaw
+        .trim()
+        .replace(/^bearer\s+/i, "") // Remove prefix if it accidentally exists in env
+        .replace(/[\r\n\t\s]+/g, "");
 
     const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
     const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
@@ -31,8 +34,8 @@ export async function GET(req: Request) {
         tax: 0,
         service: 0,
         tip: 0,
-        clientTransactionId: `YVOSS-DEBUG-${Date.now()}`,
-        reference: "TEST YVOSS MINIMAL",
+        clientTransactionId: `YVOSSDEBUG${Date.now()}`, // Alphanumeric only
+        reference: "Compra Test",
         storeId,
         currency: "USD",
         responseUrl,
@@ -46,10 +49,9 @@ export async function GET(req: Request) {
         const res = await fetch(url, {
             method: "POST",
             headers: {
-                "Authorization": `bearer ${token}`, // Forced lowercase 'bearer'
+                "Authorization": `Bearer ${token}`, // Standard uppercase
                 "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": "YVossOeee-Backend/Debug-V4"
+                "Accept": "application/json"
             },
             body: JSON.stringify(payload)
         });
@@ -64,14 +66,13 @@ export async function GET(req: Request) {
                 const h1 = raw.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = raw.match(/<h2>(.*?)<\/h2>/i)?.[1];
                 const pre = raw.match(/<pre>([\s\S]*?)<\/pre>/i)?.[1];
-                htmlExtract = (h1 || h2 || pre || "No clear error tag found").trim();
+                htmlExtract = (h1 || h2 || pre || "No specific error found in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare Debug] Upstream Error:', {
+            console.error('[PayPhone Prepare Debug] Server Error:', {
                 status: res.status,
                 contentType,
-                extract: htmlExtract,
-                snippet: raw.slice(0, 500)
+                extract: htmlExtract
             });
 
             return Response.json(
@@ -82,7 +83,7 @@ export async function GET(req: Request) {
                     contentType,
                     htmlExtract,
                     endpoint: url,
-                    bodySnippet: raw.slice(0, 5000), // Increased snippet
+                    bodySnippet: raw.slice(0, 5000),
                     requestId
                 },
                 { status: 502 }

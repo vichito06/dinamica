@@ -28,9 +28,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
         }
 
-        // Radical token cleaning
+        // Hyper-Clean token normalization
         const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
-        const token = tokenRaw.replace(/[\r\n\t\s]+/g, "");
+        const token = tokenRaw
+            .trim()
+            .replace(/^bearer\s+/i, "") // Remove prefix if it accidentally exists in env
+            .replace(/[\r\n\t\s]+/g, "");
 
         const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
         const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
         }
 
-        // Minimalist payload
+        // Minimalist payload with Alphanumeric-Only ID
         const payload = {
             amount,
             amountWithoutTax,
@@ -66,8 +69,8 @@ export async function POST(request: Request) {
             tax,
             service,
             tip,
-            clientTransactionId: `YVOSS-${Date.now()}-${sale.id.slice(-4)}`,
-            reference: "Venta Dinamica",
+            clientTransactionId: `YVOSS${Date.now()}${sale.id.slice(-4)}`, // Alphanumeric only
+            reference: "Compra",
             storeId,
             currency: "USD",
             responseUrl,
@@ -78,7 +81,7 @@ export async function POST(request: Request) {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'Authorization': `bearer ${token}`, // Forced lowercase 'bearer'
+                'Authorization': `Bearer ${token}`, // Standard uppercase
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             },
@@ -95,14 +98,13 @@ export async function POST(request: Request) {
                 const h1 = responseText.match(/<h1>(.*?)<\/h1>/i)?.[1];
                 const h2 = responseText.match(/<h2>(.*?)<\/h2>/i)?.[1];
                 const pre = responseText.match(/<pre>([\s\S]*?)<\/pre>/i)?.[1];
-                htmlExtract = (h1 || h2 || pre || "No clear error tag found").trim();
+                htmlExtract = (h1 || h2 || pre || "No specific error found in HTML").trim();
             }
 
-            console.error('[PayPhone Prepare] Upstream Error:', {
+            console.error('[PayPhone Prepare] Server Error:', {
                 status: response.status,
                 contentType,
-                extract: htmlExtract,
-                snippet: responseText.slice(0, 500)
+                extract: htmlExtract
             });
 
             return NextResponse.json({
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
                 contentType,
                 htmlExtract,
                 endpoint: url,
-                bodySnippet: responseText.slice(0, 5000) // Increased snippet
+                bodySnippet: responseText.slice(0, 5000)
             }, { status: 502 });
         }
 
