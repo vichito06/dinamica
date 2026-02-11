@@ -73,16 +73,47 @@ export async function POST(req: Request) {
         // Use a robust clientTransactionId
         const clientTransactionId = sale.clientTransactionId || `SALE${sale.id}_${Date.now()}`;
 
-        // Construct payload OMITTING fields that are 0
+        // Construct payload with real customer data (BillTo) and LineItems
+        const customer = await prisma.customer.findUnique({
+            where: { id: sale.customerId }
+        });
+
+        if (!customer) {
+            return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+        }
+
         const payload: any = {
             amount,
             clientTransactionId,
             currency: "USD",
             storeId: STORE_ID,
-            reference: body.reference ?? "Compra tickets Dinámica",
+            reference: body.reference || `Compra tickets Dinámica - ${saleId}`,
             responseUrl: `${APP_URL}/payphone/return`,
-            cancellationUrl: `${APP_URL}/payphone/cancel`, // Standardized
+            cancellationUrl: `${APP_URL}/payphone/cancel`,
             timeZone: -5,
+            email: customer.email,
+            documentId: customer.idNumber,
+            phoneNumber: customer.phone.startsWith('+') ? customer.phone : `+593${customer.phone.replace(/^0/, '')}`,
+            order: {
+                billTo: {
+                    firstName: customer.firstName,
+                    lastName: customer.lastName,
+                    email: customer.email,
+                    phoneNumber: customer.phone.startsWith('+') ? customer.phone : `+593${customer.phone.replace(/^0/, '')}`,
+                    address1: "Ecuador", // Generic if not stored
+                    country: "EC",
+                    customerId: customer.idNumber
+                },
+                lineItems: sale.tickets.map(t => ({
+                    productName: `Ticket #${t.number}`,
+                    unitPrice: Math.round(sale.amountCents / sale.tickets.length),
+                    quantity: 1,
+                    totalAmount: Math.round(sale.amountCents / sale.tickets.length),
+                    taxAmount: 0,
+                    productSKU: String(t.number),
+                    productDescription: `Ticket de rifa número ${t.number}`
+                }))
+            }
         };
 
         if (amountWithoutTax > 0) payload.amountWithoutTax = amountWithoutTax;
@@ -94,8 +125,9 @@ export async function POST(req: Request) {
         const res = await fetch("https://pay.payphonetodoesposible.com/api/button/Prepare", {
             method: "POST",
             headers: {
-                Authorization: `Bearer ${TOKEN}`,
+                Authorization: `bearer ${TOKEN}`,
                 "Content-Type": "application/json",
+                "Referer": `${APP_URL}/`
             },
             body: JSON.stringify(payload),
             signal: controller.signal

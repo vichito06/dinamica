@@ -38,11 +38,14 @@ export async function POST(req: Request) {
             clientTxId: clientTxId,
         };
 
+        const APP_URL = process.env.APP_URL || "https://yvossoeee.com";
+
         const res = await fetch("https://pay.payphonetodoesposible.com/api/button/V2/Confirm", {
             method: "POST",
             headers: {
-                Authorization: `Bearer ${TOKEN}`,
+                Authorization: `bearer ${TOKEN}`,
                 "Content-Type": "application/json",
+                "Referer": `${APP_URL}/`
             },
             body: JSON.stringify(payload),
         });

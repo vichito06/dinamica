@@ -46,13 +46,46 @@ curl -X POST http://localhost:3000/api/payphone/confirm \
 
 ---
 
-## 3. Checklist for Production
+## 4. Health Check (Environment Validation)
 
-- [ ] **Referrer-Policy**: Header `origin-when-cross-origin` must be active in `next.config.js`.
-- [ ] **PayPhone Dashboard**: Domain authorized? `responseUrl` set? App type is **WEB**?
-- [ ] **HTTPS**: Production URL must have SSL.
-- [ ] **AbortController**: Fetch timeout set to 10s to prevent hang-ups.
-- [ ] **Error Snippets**: Non-JSON responses from PayPhone are captured and logged (check logs for `PAYPHONE_NON_JSON`).
+Validate that critical environment variables are set in production without exposing sensitive data.
 
-## 4. Debug Endpoint
-Access `/api/payphone/prepare-debug` (requires authentication) to see a live test of the upstream connection with detailed payload logs.
+```powershell
+# Windows PowerShell
+curl.exe -i "https://yvossoeee.com/api/payphone/health"
+```
+
+**Expected Response (JSON):**
+```json
+{
+  "ok": true,
+  "env": {
+    "tokenPresent": true,
+    "storeIdPresent": true,
+    "appUrlPresent": true
+  },
+  "referrerPolicyHint": "origin-when-cross-origin required"
+}
+```
+
+---
+
+## 5. Debug Endpoint
+
+Access a live test of the upstream connection with detailed payload logs.
+
+### Set up the Debug Secret
+1. Add `PAYPHONE_DEBUG_SECRET` to your `.env.local` or Vercel Environment Variables.
+2. Value can be any strong string.
+
+### Execute Debug Test
+```powershell
+# Windows PowerShell
+$secret="TU_SECRET_AQUI"
+curl.exe -i -H "x-test-secret: $secret" "https://yvossoeee.com/api/payphone/prepare-debug"
+```
+
+**Security Notes:**
+- If `PAYPHONE_DEBUG_SECRET` is missing, the endpoint returns `503 Service Unavailable`.
+- If the header is wrong, it returns `401 Unauthorized`.
+- Full tokens are NEVER logged; only the first 6 characters are shown as a prefix.

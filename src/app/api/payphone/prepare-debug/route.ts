@@ -6,11 +6,11 @@ export async function GET(req: Request) {
     const requestId = crypto.randomUUID();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
+    // 1. Auth check
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
-    // Hyper-Clean token normalization (V2 Patch)
+    // 2. Load and Clean Config
     const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
     const tokenLimpio = tokenRaw
         .trim()
@@ -45,13 +45,13 @@ export async function GET(req: Request) {
 
     const payload: any = {
         amount,
-        clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
+        clientTransactionId: `YVOSS${Date.now()}`.toUpperCase().slice(0, 16),
         currency: "USD",
         storeId,
-        reference: "TEST YVOSS MINIMALIST",
+        reference: "TEST YVOSS DEBUG",
         responseUrl,
-        cancellationUrl: cancellationUrl || undefined,
-        timeZone: -5,
+        cancellationUrl: cancellationUrl || "https://yvossoeee.com/",
+        timeZone: "-5",
     };
 
     if (amountWithoutTax > 0) payload.amountWithoutTax = amountWithoutTax;
@@ -63,13 +63,16 @@ export async function GET(req: Request) {
     console.log('[PayPhone Prepare Debug] Requesting Minimalist:', url);
 
     try {
+        const appUrl = (process.env.APP_URL || "https://yvossoeee.com").trim().replace(/\/+$/, "");
+
         const res = await fetch(url, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${tokenLimpio}`,
+                "Authorization": `bearer ${tokenLimpio}`,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "PayPhone-SDK-Node/1.0"
+                "User-Agent": "PayPhone-SDK-Node/1.0",
+                "Referer": `${appUrl}/`
             },
             body: JSON.stringify(payload),
             signal: controller.signal
@@ -85,6 +88,7 @@ export async function GET(req: Request) {
             authPresent,
             authPrefix: authPrefix ? `${authPrefix}...` : "NONE",
             requestId,
+            storeIdLen: storeId.length,
             endpoint: url,
             payloadSent: { ...payload, storeId: 'HIDDEN' },
             bodySnippet: raw.slice(0, 800)
