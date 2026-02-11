@@ -4,11 +4,23 @@ import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+function mustEnv(name: string) {
+    const v = process.env[name];
+    if (!v) throw new Error(`Missing env var: ${name}`);
+    return v;
+}
+
+export async function POST(req: Request) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     try {
-        const body = await request.json();
+        const TOKEN = mustEnv("PAYPHONE_TOKEN");
+        const STORE_ID = mustEnv("PAYPHONE_STORE_ID");
+        const APP_URL = mustEnv("APP_URL");
+
+        const body = await req.json();
         const { saleId } = body;
 
         if (!saleId) {
@@ -17,40 +29,31 @@ export async function POST(request: Request) {
 
         const sale = await prisma.sale.findUnique({
             where: { id: saleId },
-            include: { tickets: true, customer: true }
+            include: { tickets: true }
         });
 
         if (!sale) {
             return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
         }
 
-        if (sale.status !== SaleStatus.PENDING_PAYMENT) {
-            return NextResponse.json({ error: 'Sale is not pending payment' }, { status: 400 });
+        if (sale.status !== SaleStatus.PENDING) {
+            return NextResponse.json({ error: `La venta está en estado ${sale.status}` }, { status: 400 });
         }
 
-        // Hyper-Clean token normalization (V2 Patch)
-        const tokenRaw = process.env.PAYPHONE_TOKEN ?? "";
-        const tokenLimpio = tokenRaw
-            .trim()
-            .replace(/^(bearer\s+|Bearer\s+)/i, "") // Radical prefix removal
-            .replace(/[\r\n\t\s]+/g, "");
+        // Anti-duplicate & Expiry check
+        const now = new Date();
+        const invalidTickets = sale.tickets.filter(t =>
+            t.status !== TicketStatus.HELD || (t.reservedUntil && t.reservedUntil < now)
+        );
 
-        const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
-        const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
-            .trim()
-            .replace(/\/+$/, "");
-
-        const responseUrl = (process.env.PAYPHONE_RESPONSE_URL || "https://yvossoeee.com/payphone/return").trim();
-        const cancellationUrl = (process.env.PAYPHONE_CANCEL_URL || "https://yvossoeee.com/payphone/cancel").trim();
-
-        if (!tokenLimpio || !storeId || !responseUrl) {
-            return NextResponse.json({ error: 'Configuración de PayPhone incompleta' }, { status: 500 });
+        if (invalidTickets.length > 0) {
+            return NextResponse.json({
+                error: 'La reserva de los tickets ha expirado o ya no son válidos',
+                expiredNumbers: invalidTickets.map(t => t.number)
+            }, { status: 410 });
         }
 
-        // Standard Endpoint URL (Minimalist)
-        const url = `${baseUrl}/api/button/Prepare`;
-
-        // Strict calculation (integers only)
+        // PayPhone amounts in cents (integers)
         const amount = Math.round(sale.amountCents);
         const amountWithoutTax = amount;
         const amountWithTax = 0;
@@ -58,86 +61,95 @@ export async function POST(request: Request) {
         const service = 0;
         const tip = 0;
 
-        if (amount !== (amountWithoutTax + amountWithTax + tax + service + tip)) {
-            return NextResponse.json({ error: 'Sum validation failed' }, { status: 400 });
+        // Internal Validation: amount == sum(others)
+        const sum = amountWithoutTax + amountWithTax + tax + service + tip;
+        if (amount !== sum) {
+            return NextResponse.json({
+                error: "Validación interna falló: El monto total no coincide con la suma de componentes.",
+                detail: `Total: ${amount}, Suma: ${sum}`
+            }, { status: 400 });
         }
 
-        // Minimalist Payload (Standard camelCase)
-        const payload = {
+        // Use a robust clientTransactionId
+        const clientTransactionId = sale.clientTransactionId || `SALE${sale.id}_${Date.now()}`;
+
+        // Construct payload OMITTING fields that are 0
+        const payload: any = {
             amount,
-            amountWithoutTax,
-            amountWithTax,
-            tax,
-            service,
-            tip,
-            clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
-            reference: "Compra Dinamica",
-            storeId,
+            clientTransactionId,
             currency: "USD",
-            responseUrl,
-            cancellationUrl: cancellationUrl || undefined
-            // Optional lat, lng, timeZone omitted for stability
+            storeId: STORE_ID,
+            reference: body.reference ?? "Compra tickets Dinámica",
+            responseUrl: `${APP_URL}/payphone/return`,
+            cancellationUrl: `${APP_URL}/payphone/cancel`, // Standardized
+            timeZone: -5,
         };
 
-        const response = await fetch(url, {
-            method: 'POST',
+        if (amountWithoutTax > 0) payload.amountWithoutTax = amountWithoutTax;
+        if (amountWithTax > 0) payload.amountWithTax = amountWithTax;
+        if (tax > 0) payload.tax = tax;
+        if (service > 0) payload.service = service;
+        if (tip > 0) payload.tip = tip;
+
+        const res = await fetch("https://pay.payphonetodoesposible.com/api/button/Prepare", {
+            method: "POST",
             headers: {
-                'Authorization': `Bearer ${tokenLimpio}`,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'User-Agent': 'PayPhone-SDK-Node/1.0'
+                Authorization: `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
 
-        const responseText = await response.text();
-        const contentType = response.headers.get('content-type') || '';
+        const text = await res.text();
+        const contentType = res.headers.get("content-type") || "";
 
-        if (!response.ok || !contentType.includes('application/json')) {
-            // Precise diagnosis for HTML errors
-            let htmlExtract = "";
-            if (contentType.includes('text/html')) {
-                const h1 = responseText.match(/<h1>(.*?)<\/h1>/i)?.[1];
-                const h2 = responseText.match(/<h2>(.*?)<\/h2>/i)?.[1];
-                const desc = responseText.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
-                htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
-            }
-
-            console.error('[PayPhone Prepare] Minimalist Server Error:', {
-                status: response.status,
-                contentType,
-                extract: htmlExtract,
-                url
-            });
-
-            return NextResponse.json({
-                ok: false,
-                error: contentType.includes('application/json') ? 'PAYPHONE_UPSTREAM_ERROR' : 'PAYPHONE_NON_JSON',
-                upstreamStatus: response.status,
-                contentType,
-                htmlExtract,
-                endpoint: url,
-                payloadSent: { ...payload, storeId: 'HIDDEN' },
-                bodySnippet: responseText.slice(0, 5000)
-            }, { status: 502 });
+        if (!res.ok) {
+            console.error('[PayPhone Prepare] Error Status:', res.status);
+            console.error('[PayPhone Prepare] Body Snippet:', text.slice(0, 500));
+            return NextResponse.json(
+                {
+                    error: "Payphone Prepare failed (Upstream Error)",
+                    upstreamStatus: res.status,
+                    detail: text.slice(0, 800)
+                },
+                { status: 502 }
+            );
         }
 
-        const responseData = JSON.parse(responseText);
+        if (!contentType.includes("application/json")) {
+            console.error('[PayPhone Prepare] Non-JSON Response:', contentType);
+            return NextResponse.json(
+                {
+                    error: "Payphone returned non-JSON response",
+                    code: "PAYPHONE_NON_JSON",
+                    contentType,
+                    detail: text.slice(0, 800)
+                },
+                { status: 502 }
+            );
+        }
 
-        if (responseData.paymentId) {
+        const data = JSON.parse(text); // { paymentId, payWithPayPhone, payWithCard }
+
+        if (data.paymentId) {
             await prisma.sale.update({
                 where: { id: sale.id },
-                data: { payphonePaymentId: String(responseData.paymentId) }
+                data: {
+                    payphonePaymentId: String(data.paymentId),
+                    clientTransactionId: clientTransactionId
+                }
             });
         }
 
-        return NextResponse.json({
-            redirectUrl: responseData.payWithCard || responseData.url,
-            paymentId: responseData.paymentId
-        });
-
-    } catch (error: any) {
-        console.error('[PayPhone Prepare] Exception:', error);
-        return NextResponse.json({ error: 'Internal Server Error', details: error.message }, { status: 500 });
+        return NextResponse.json(data);
+    } catch (e: any) {
+        if (e.name === 'AbortError') {
+            return NextResponse.json({ error: "Payphone request timed out (10s)" }, { status: 504 });
+        }
+        console.error('[PayPhone Prepare] Exception:', e);
+        return NextResponse.json({ error: e?.message ?? "Unexpected error" }, { status: 500 });
+    } finally {
+        clearTimeout(timeoutId);
     }
 }

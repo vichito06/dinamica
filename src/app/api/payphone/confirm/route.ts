@@ -1,70 +1,78 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { SaleStatus, TicketStatus } from '@prisma/client';
 
-export const runtime = 'nodejs';
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { SaleStatus, TicketStatus } from "@prisma/client";
 
-export async function POST(request: Request) {
+export const runtime = "nodejs";
+
+function mustEnv(name: string) {
+    const v = process.env[name];
+    if (!v) throw new Error(`Missing env var: ${name}`);
+    return v;
+}
+
+export async function POST(req: Request) {
     try {
-        const body = await request.json();
-        const { id, clientTransactionId } = body;
+        const TOKEN = mustEnv("PAYPHONE_TOKEN");
+        const body = await req.json();
 
-        if (!id || !clientTransactionId) {
-            return NextResponse.json({ error: 'Missing id or clientTransactionId' }, { status: 400 });
-        }
+        const clientTxId = String(body.clientTransactionId ?? body.clientTxId);
 
-        const payPhoneToken = process.env.PAYPHONE_TOKEN;
-        if (!payPhoneToken) {
-            console.error('Missing PAYPHONE_TOKEN env var');
-            return NextResponse.json({ error: 'Configuration error' }, { status: 500 });
-        }
-
-        const response = await fetch('https://pay.payphonetodoesposible.com/api/button/V2/Confirm', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${payPhoneToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                id: id,
-                clientTxId: clientTransactionId
-            })
+        // Idempotency check: If sale already paid, return early
+        const existingSale = await prisma.sale.findUnique({
+            where: { clientTransactionId: clientTxId }
         });
 
-        const responseText = await response.text();
-        let responseData;
-
-        try {
-            responseData = JSON.parse(responseText);
-        } catch (e) {
-            console.error('[PayPhone Confirm] Non-JSON response:', responseText);
-            return NextResponse.json({ error: 'Upstream provider error' }, { status: 502 });
+        if (existingSale && existingSale.status === SaleStatus.PAID) {
+            return NextResponse.json({
+                status: "OK",
+                message: "Sale already confirmed as paid",
+                transactionStatus: "Approved",
+                statusCode: 3
+            });
         }
 
-        if (!response.ok) {
-            console.error('[PayPhone Confirm] Error:', response.status, responseData);
-            // Handle cancellation or error
-            await handleCancellation(clientTransactionId);
-            return NextResponse.json({ error: 'Payment failed', details: responseData }, { status: 400 });
+        // PayPhone requirements: { id, clientTxId }
+        const payload = {
+            id: Number(body.id),
+            clientTxId: clientTxId,
+        };
+
+        const res = await fetch("https://pay.payphonetodoesposible.com/api/button/V2/Confirm", {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${TOKEN}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const text = await res.text();
+        if (!res.ok) {
+            console.error('[PayPhone Confirm] Error:', res.status, text);
+            return NextResponse.json(
+                { error: "Payphone Confirm failed", status: res.status, detail: text.slice(0, 800) },
+                { status: 502 }
+            );
         }
 
-        // Check transactionStatus
-        if (responseData.transactionStatus === 'Approved') {
-            await confirmSale(clientTransactionId, responseData);
-            return NextResponse.json({ status: 'Approved', data: responseData });
-        } else {
-            await handleCancellation(clientTransactionId);
-            return NextResponse.json({ status: responseData.transactionStatus, data: responseData });
+        const data = JSON.parse(text); // includes statusCode, transactionStatus, etc.
+
+        // statusCode: 3 approved, 2 canceled.
+        if (data.statusCode === 3) {
+            await confirmSale(payload.clientTxId, data);
+        } else if (data.statusCode === 2) {
+            await handleCancellation(payload.clientTxId);
         }
 
-    } catch (error: any) {
-        console.error('[PayPhone Confirm] Exception:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json(data);
+    } catch (e: any) {
+        console.error('[PayPhone Confirm] Exception:', e);
+        return NextResponse.json({ error: e?.message ?? "Unexpected error" }, { status: 500 });
     }
 }
 
 async function confirmSale(clientTxId: string, payphoneData: any) {
-    // Atomic update
     await prisma.$transaction(async (tx) => {
         const sale = await tx.sale.findUnique({
             where: { clientTransactionId: clientTxId },
@@ -72,20 +80,19 @@ async function confirmSale(clientTxId: string, payphoneData: any) {
         });
 
         if (!sale) return;
+        if (sale.status === SaleStatus.PAID) return;
 
-        if (sale.status === SaleStatus.PAID) return; // Already paid
-
-        // Update Sale
         await tx.sale.update({
             where: { id: sale.id },
             data: {
                 status: SaleStatus.PAID,
-                payphonePaymentId: String(payphoneData.transactionId || payphoneData.id), // PayPhone returns id or transactionId? Verify docs or response
+                payphonePaymentId: String(payphoneData.transactionId || payphoneData.id),
+                payphoneStatusCode: Number(payphoneData.statusCode),
+                payphoneAuthorizationCode: String(payphoneData.authorizationCode || ""),
                 confirmedAt: new Date(),
             }
         });
 
-        // Update Tickets
         for (const t of sale.tickets) {
             await tx.ticket.update({
                 where: { id: t.id },
@@ -103,24 +110,25 @@ async function handleCancellation(clientTxId: string) {
         });
 
         if (!sale) return;
-        if (sale.status === SaleStatus.PAID) return; // Don't cancel if already paid (race condition)
+        if (sale.status === SaleStatus.PAID) return;
 
-        // Update Sale
         await tx.sale.update({
             where: { id: sale.id },
             data: { status: SaleStatus.CANCELED }
         });
 
-        // Release Tickets
         for (const t of sale.tickets) {
-            await tx.ticket.update({
-                where: { id: t.id },
-                data: {
-                    status: TicketStatus.AVAILABLE,
-                    saleId: null,
-                    reservedUntil: null
-                }
-            });
+            // Only free up tickets if they are currently HELD by this sale
+            if (t.status === TicketStatus.HELD) {
+                await tx.ticket.update({
+                    where: { id: t.id },
+                    data: {
+                        status: TicketStatus.AVAILABLE,
+                        saleId: null,
+                        reservedUntil: null
+                    }
+                });
+            }
         }
     });
 }

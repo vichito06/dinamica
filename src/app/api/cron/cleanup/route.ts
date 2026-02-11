@@ -15,10 +15,10 @@ export async function GET(request: Request) {
 
         const now = new Date();
 
-        // Find expired tickets that are RESERVED
+        // Find expired tickets that are HELD
         const expiredTickets = await prisma.ticket.findMany({
             where: {
-                status: TicketStatus.RESERVED,
+                status: TicketStatus.HELD,
                 reservedUntil: { lt: now }
             },
             include: { sale: true }
@@ -47,11 +47,11 @@ export async function GET(request: Request) {
             });
 
             // 2. Expire Sales
-            // Only expire sales that are PENDING_PAYMENT
+            // Only expire sales that are PENDING
             await tx.sale.updateMany({
                 where: {
                     id: { in: expiredSaleIds },
-                    status: SaleStatus.PENDING_PAYMENT
+                    status: SaleStatus.PENDING
                 },
                 data: {
                     status: SaleStatus.EXPIRED

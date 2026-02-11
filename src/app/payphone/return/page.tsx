@@ -32,13 +32,16 @@ function ReturnContent() {
 
                 const data = await response.json();
 
-                if (response.ok && data.status === 'Approved') {
+                // PayPhone statusCode: 3 approved, 2 canceled.
+                if (response.ok && data.statusCode === 3) {
                     setStatus('success');
-                    // Clear cart/session if needed
                     sessionStorage.removeItem('selectedNumbers');
+                } else if (data.statusCode === 2) {
+                    setStatus('error');
+                    setMessage('El pago fue cancelado por el usuario.');
                 } else {
                     setStatus('error');
-                    setMessage(data.error || 'El pago no fue aprobado o fue cancelado.');
+                    setMessage(data.error || 'El pago no pudo ser verificado o no fue aprobado.');
                 }
             } catch (error) {
                 console.error('Confirmation error:', error);
@@ -48,7 +51,7 @@ function ReturnContent() {
         };
 
         confirmPayment();
-    }, [searchParams]);
+    }, [searchParams, router]);
 
     return (
         <motion.div

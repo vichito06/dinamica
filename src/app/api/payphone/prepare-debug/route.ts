@@ -1,8 +1,12 @@
+
 export const runtime = "nodejs";
 import { requirePayphoneTestSecret } from "@/lib/payphone-auth";
 
 export async function GET(req: Request) {
     const requestId = crypto.randomUUID();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
     const auth = requirePayphoneTestSecret(req);
     if (!auth.ok) return Response.json(auth.body, { status: auth.status });
 
@@ -12,6 +16,9 @@ export async function GET(req: Request) {
         .trim()
         .replace(/^(bearer\s+|Bearer\s+)/i, "")
         .replace(/[\r\n\t\s]+/g, "");
+
+    const authPrefix = tokenLimpio ? tokenLimpio.substring(0, 6) : "";
+    const authPresent = tokenLimpio.length > 0;
 
     const storeId = (process.env.PAYPHONE_STORE_ID ?? "").trim();
     const baseUrl = (process.env.PAYPHONE_BASE_URL ?? "https://pay.payphonetodoesposible.com")
@@ -28,21 +35,30 @@ export async function GET(req: Request) {
     // Standard Endpoint URL (Minimalist)
     const url = `${baseUrl}/api/button/Prepare`;
 
-    const payload = {
-        amount: 100,
-        amountWithoutTax: 100,
-        amountWithTax: 0,
-        tax: 0,
-        service: 0,
-        tip: 0,
+    // Internal Validation Rule: amount == sum(others)
+    const amount = 100;
+    const amountWithoutTax = 100;
+    const amountWithTax = 0;
+    const tax = 0;
+    const service = 0;
+    const tip = 0;
+
+    const payload: any = {
+        amount,
         clientTransactionId: `YVOSS${Date.now()}${Math.random().toString(36).slice(2, 8)}`.toUpperCase().slice(0, 50),
         currency: "USD",
         storeId,
         reference: "TEST YVOSS MINIMALIST",
         responseUrl,
-        cancellationUrl: cancellationUrl || undefined
-        // Optional lat, lng, timeZone omitted for stability
+        cancellationUrl: cancellationUrl || undefined,
+        timeZone: -5,
     };
+
+    if (amountWithoutTax > 0) payload.amountWithoutTax = amountWithoutTax;
+    if (amountWithTax > 0) payload.amountWithTax = amountWithTax;
+    if (tax > 0) payload.tax = tax;
+    if (service > 0) payload.service = service;
+    if (tip > 0) payload.tip = tip;
 
     console.log('[PayPhone Prepare Debug] Requesting Minimalist:', url);
 
@@ -50,46 +66,41 @@ export async function GET(req: Request) {
         const res = await fetch(url, {
             method: "POST",
             headers: {
-                // Using standard "Bearer" (Uppercase) which PayPhone's IIS server often requires
                 "Authorization": `Bearer ${tokenLimpio}`,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
                 "User-Agent": "PayPhone-SDK-Node/1.0"
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: controller.signal
         });
 
         const raw = await res.text();
         const contentType = res.headers.get("content-type") || "";
 
-        if (!res.ok || !contentType.includes("application/json")) {
-            // Precise diagnosis for HTML errors
-            let htmlExtract = "";
-            if (contentType.includes('text/html')) {
-                const h1 = raw.match(/<h1>(.*?)<\/h1>/i)?.[1];
-                const h2 = raw.match(/<h2>(.*?)<\/h2>/i)?.[1];
-                const desc = raw.match(/<b> Description: <\/b>(.*?)<br>/i)?.[1];
-                htmlExtract = (h1 || h2 || desc || "No identified error tag in HTML").trim();
-            }
+        const debugInfo = {
+            ok: res.ok,
+            upstreamStatus: res.status,
+            contentType,
+            authPresent,
+            authPrefix: authPrefix ? `${authPrefix}...` : "NONE",
+            requestId,
+            endpoint: url,
+            payloadSent: { ...payload, storeId: 'HIDDEN' },
+            bodySnippet: raw.slice(0, 800)
+        };
 
+        if (!res.ok || !contentType.includes("application/json")) {
             console.error('[PayPhone Prepare Debug] Minimalist Server Error:', {
                 status: res.status,
                 contentType,
-                extract: htmlExtract,
-                url
+                requestId
             });
 
             return Response.json(
                 {
-                    ok: false,
-                    code: contentType.includes('application/json') ? "PAYPHONE_UPSTREAM_ERROR" : "PAYPHONE_NON_JSON",
-                    upstreamStatus: res.status,
-                    contentType,
-                    htmlExtract,
-                    endpoint: url,
-                    payloadSent: { ...payload, storeId: 'HIDDEN' },
-                    bodySnippet: raw.slice(0, 5000),
-                    requestId
+                    ...debugInfo,
+                    code: contentType.includes('application/json') ? "PAYPHONE_UPSTREAM_ERROR" : "PAYPHONE_NON_JSON"
                 },
                 { status: 502 }
             );
@@ -97,13 +108,14 @@ export async function GET(req: Request) {
 
         const data = JSON.parse(raw);
         return Response.json({
-            ok: true,
-            endpoint: url,
-            payloadSent: { ...payload, storeId: 'HIDDEN' },
+            ...debugInfo,
             payphoneResponse: data
         });
 
     } catch (e: any) {
+        if (e.name === 'AbortError') {
+            return Response.json({ ok: false, error: "Payphone request timed out (10s)", requestId }, { status: 504 });
+        }
         console.error('[PayPhone Prepare Debug] Exception:', e);
         return Response.json({
             ok: false,
@@ -111,5 +123,7 @@ export async function GET(req: Request) {
             error: e.message,
             requestId
         }, { status: 500 });
+    } finally {
+        clearTimeout(timeoutId);
     }
 }

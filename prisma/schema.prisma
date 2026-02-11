@@ -23,7 +23,7 @@ model Analytics {
 }
 
 enum SaleStatus {
-  PENDING_PAYMENT
+  PENDING
   PAID
   CANCELED
   EXPIRED
@@ -31,7 +31,7 @@ enum SaleStatus {
 
 enum TicketStatus {
   AVAILABLE
-  RESERVED
+  HELD
   SOLD
 }
 
@@ -50,14 +50,16 @@ model Ticket {
 
 model Sale {
   id          String     @id @default(cuid())
-  status      SaleStatus @default(PENDING_PAYMENT)
+  status      SaleStatus @default(PENDING)
   amountCents Int
   currency    String     @default("USD")
 
   // PayPhone specific fields
-  provider            PaymentProvider @default(PAYPHONE)
-  payphonePaymentId   String? // Returned by PayPhone
-  clientTransactionId String          @unique @default(cuid()) // Our unique reference for PayPhone
+  provider                  PaymentProvider @default(PAYPHONE)
+  payphonePaymentId         String? // Returned by PayPhone
+  clientTransactionId       String          @unique @default(cuid()) // Our unique reference for PayPhone
+  payphoneStatusCode        Int?
+  payphoneAuthorizationCode String?
 
   confirmedAt DateTime?
 

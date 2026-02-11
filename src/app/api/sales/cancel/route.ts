@@ -14,7 +14,7 @@ export async function POST(req: Request) {
             const sale = await tx.sale.findUnique({ where: { id: saleId } });
 
             if (!sale) return; // Silent fail if not found
-            if (sale.status !== SaleStatus.PENDING_PAYMENT) return; // Only cancel pending
+            if (sale.status !== SaleStatus.PENDING) return; // Only cancel pending
 
             await tx.sale.update({
                 where: { id: saleId },
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
             });
 
             await tx.ticket.updateMany({
-                where: { saleId: saleId, status: TicketStatus.RESERVED },
+                where: { saleId: saleId, status: TicketStatus.HELD },
                 data: { status: TicketStatus.AVAILABLE, reservedUntil: null, saleId: null }
             });
         });

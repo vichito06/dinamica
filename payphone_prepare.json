@@ -1,0 +1,17 @@
+﻿{
+    "service":  0,
+    "clientTransactionId":  "1770693899284",
+    "tax":  0,
+    "lat":  "-2.7400",
+    "responseUrl":  "https://yvossoeee.com/payphone/return",
+    "amountWithTax":  0,
+    "reference":  "TEST YVOSS",
+    "amount":  100,
+    "storeId":  "TU_STOREID_AQUI",
+    "currency":  "USD",
+    "timeZone":  -5,
+    "amountWithoutTax":  100,
+    "tip":  0,
+    "cancellationUrl":  "https://yvossoeee.com/payphone/cancel",
+    "lng":  "-78.8500"
+}

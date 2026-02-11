@@ -19,7 +19,7 @@ export async function GET() {
 
         // Calculate stats for each customer
         const formattedCustomers = customers.map(c => {
-            const paidSales = c.sales.filter(s => s.status === SaleStatus.PAID || s.status === SaleStatus.PENDING_PAYMENT);
+            const paidOrPendingSales = c.sales.filter(s => s.status === SaleStatus.PAID || s.status === SaleStatus.PENDING);
             // In admin, we might want to see all sales, or just paid? 
             // Usually "Ventas" implies success or at least intent. 
             // Let's include all non-canceled/expired for stats to match "active" view, 

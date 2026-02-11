@@ -29,7 +29,7 @@ export async function POST(request: Request) {
             const now = new Date();
             const unavailable = existingTickets.filter(t =>
                 t.status === TicketStatus.SOLD ||
-                (t.status === TicketStatus.RESERVED && t.reservedUntil && t.reservedUntil > now)
+                (t.status === TicketStatus.HELD && t.reservedUntil && t.reservedUntil > now)
             );
 
             if (unavailable.length > 0) {
@@ -38,7 +38,6 @@ export async function POST(request: Request) {
             }
 
             // Handle Customer (Upsert by Cédula)
-            // Ensure personalData has required fields
             if (!personalData || !personalData.idNumber) {
                 throw new Error('Datos del cliente incompletos (Falta Cédula)');
             }
@@ -63,27 +62,26 @@ export async function POST(request: Request) {
             // Create Sale linked to Customer
             const sale = await tx.sale.create({
                 data: {
-                    status: SaleStatus.PENDING_PAYMENT,
+                    status: SaleStatus.PENDING,
                     amountCents: Math.round(Number(total) * 100),
                     currency: 'USD',
                     customerId: customer.id,
                     provider: 'PAYPHONE',
-                    // tickets relation will be handled by updating tickets below
                 }
             });
 
-            // Reserve Tickets
+            // Hold Tickets (anti-duplicate)
             for (const num of ticketNumbers) {
                 await tx.ticket.upsert({
                     where: { number: num },
                     update: {
-                        status: TicketStatus.RESERVED,
+                        status: TicketStatus.HELD,
                         saleId: sale.id,
-                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
+                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes hold
                     },
                     create: {
                         number: num,
-                        status: TicketStatus.RESERVED,
+                        status: TicketStatus.HELD,
                         saleId: sale.id,
                         reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
                     }
