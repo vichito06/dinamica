@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     }
 
     // Standard Endpoint URL (Minimalist)
-    const url = `${baseUrl}/api/button/Prepare`;
+    const url = `${baseUrl}/api/button/V2/Prepare`;
 
     // Internal Validation Rule: amount == sum(others)
     const amount = 100;

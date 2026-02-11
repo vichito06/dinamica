@@ -122,7 +122,7 @@ export async function POST(req: Request) {
         if (service > 0) payload.service = service;
         if (tip > 0) payload.tip = tip;
 
-        const res = await fetch("https://pay.payphonetodoesposible.com/api/button/Prepare", {
+        const res = await fetch("https://pay.payphonetodoesposible.com/api/button/V2/Prepare", {
             method: "POST",
             headers: {
                 Authorization: `bearer ${TOKEN}`,
