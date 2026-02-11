@@ -44,23 +44,33 @@ export async function GET(req: Request) {
     const tip = 0;
 
     const payload: any = {
-        amount,
+        amount: 100,
+        amountWithoutTax: 100,
+        amountWithTax: 0,
+        tax: 0,
+        service: 0,
+        tip: 0,
         clientTransactionId: `YVOSS${Date.now()}`.toUpperCase().slice(0, 16),
         currency: "USD",
         storeId,
-        reference: "TEST YVOSS DEBUG",
+        reference: "DEBUG TEST V2",
         responseUrl,
         cancellationUrl: cancellationUrl || "https://yvossoeee.com/",
         timeZone: "-5",
+        order: {
+            billTo: {
+                firstName: "Rifa",
+                lastName: "Debug",
+                email: "debug@yvossoeee.com",
+                phoneNumber: "+593999999999",
+                address1: "Quito",
+                country: "EC",
+                customerId: "9999999999"
+            }
+        }
     };
 
-    if (amountWithoutTax > 0) payload.amountWithoutTax = amountWithoutTax;
-    if (amountWithTax > 0) payload.amountWithTax = amountWithTax;
-    if (tax > 0) payload.tax = tax;
-    if (service > 0) payload.service = service;
-    if (tip > 0) payload.tip = tip;
-
-    console.log('[PayPhone Prepare Debug] Requesting Minimalist:', url);
+    console.log('[PayPhone Prepare Debug] Requesting:', url);
 
     try {
         const appUrl = (process.env.APP_URL || "https://yvossoeee.com").trim().replace(/\/+$/, "");
@@ -71,7 +81,6 @@ export async function GET(req: Request) {
                 "Authorization": `bearer ${tokenLimpio}`,
                 "Content-Type": "application/json",
                 "Accept": "application/json",
-                "User-Agent": "PayPhone-SDK-Node/1.0",
                 "Referer": `${appUrl}/`
             },
             body: JSON.stringify(payload),

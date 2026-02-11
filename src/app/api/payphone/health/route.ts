@@ -7,6 +7,7 @@ export async function GET() {
 
     return NextResponse.json({
         ok: true,
+        version: "2.0.1-STABLE", // NEW UNIQUE MARKER
         env: {
             tokenPresent: !!process.env.PAYPHONE_TOKEN,
             storeIdPresent: !!process.env.PAYPHONE_STORE_ID,

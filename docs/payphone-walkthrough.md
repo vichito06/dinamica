@@ -59,14 +59,19 @@ curl.exe -i "https://yvossoeee.com/api/payphone/health"
 ```json
 {
   "ok": true,
+  "version": "2.0.1-STABLE",
   "env": {
     "tokenPresent": true,
     "storeIdPresent": true,
     "appUrlPresent": true
   },
+  "appUrl": "https://yvossoeee.com",
   "referrerPolicyHint": "origin-when-cross-origin required"
 }
 ```
+
+> [!IMPORTANT]
+> Si no ves la clave `"version": "2.0.1-STABLE"`, significa que Vercel aún está sirviendo una versión antigua.
 
 ---
 
