@@ -60,6 +60,8 @@ model Sale {
   clientTransactionId       String          @unique @default(cuid()) // Our unique reference for PayPhone
   payphoneStatusCode        Int?
   payphoneAuthorizationCode String?
+  payWithCardUrl            String? // Persist the payment link for idempotency
+  preparedAt                DateTime? // When the last successful prepare was called
 
   confirmedAt DateTime?
 
@@ -72,6 +74,7 @@ model Sale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
 
 model Customer {
   id        String @id @default(cuid())

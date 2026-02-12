@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { SaleStatus } from "@prisma/client";
-import { payphonePrepare, PayphonePreparePayload } from "@/lib/payphone-client";
+import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 
 export const runtime = "nodejs";
 
@@ -13,15 +13,33 @@ function mustEnv(name: string) {
 }
 
 export async function POST(req: Request) {
+    const requestId = crypto.randomUUID();
+    let body;
+
+    try {
+        body = await req.json();
+    } catch (e) {
+        return NextResponse.json({
+            ok: false,
+            code: "INVALID_JSON",
+            message: "Invalid JSON in request body",
+            requestId
+        }, { status: 400 });
+    }
+
     try {
         const STORE_ID = mustEnv("PAYPHONE_STORE_ID");
         const APP_URL = mustEnv("APP_URL");
 
-        const body = await req.json();
         const { saleId } = body;
 
         if (!saleId) {
-            return NextResponse.json({ error: 'Missing saleId' }, { status: 400 });
+            return NextResponse.json({
+                ok: false,
+                code: "MISSING_SALE_ID",
+                message: "Missing saleId",
+                requestId
+            }, { status: 400 });
         }
 
         const sale = await prisma.sale.findUnique({
@@ -30,21 +48,47 @@ export async function POST(req: Request) {
         });
 
         if (!sale) {
-            return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
+            return NextResponse.json({
+                ok: false,
+                code: "SALE_NOT_FOUND",
+                message: "Sale not found",
+                requestId
+            }, { status: 404 });
         }
 
-        if (sale.status !== SaleStatus.PENDING && sale.status !== 'PENDING_PAYMENT' as any) {
-            return NextResponse.json({ error: `La venta no está pendiente (${sale.status})` }, { status: 400 });
+        // Idempotencia: Si ya tiene un payWithCardUrl y está PENDING, devolverlo
+        if (sale.payWithCardUrl && sale.status === SaleStatus.PENDING) {
+            console.log(`[PayPhone Prepare] [${requestId}] Returning cached URL for sale ${saleId}`);
+            return NextResponse.json({
+                ok: true,
+                data: {
+                    payWithCard: sale.payWithCardUrl,
+                    // Note: We might want to store payWithPayPhoneUrl too if we want full idempotency for both
+                    paymentId: sale.payphonePaymentId,
+                    clientTransactionId: sale.clientTransactionId,
+                    cached: true
+                }
+            });
+        }
+
+        // Validar estado
+        if (sale.status !== SaleStatus.PENDING && (sale.status as string) !== 'PENDING_PAYMENT') {
+            return NextResponse.json({
+                ok: false,
+                code: "INVALID_SALE_STATUS",
+                message: `La venta no está pendiente (${sale.status})`,
+                requestId
+            }, { status: 400 });
         }
 
         const amount = Math.round(sale.amountCents);
         const amountWithoutTax = amount;
 
-        // Use a robust clientTransactionId (cut to 16 chars)
+        // Use a robust clientTransactionId (fixed to 16 chars)
         const clientTransactionId = (sale.clientTransactionId || `S${sale.id}_${Date.now()}`).slice(0, 16);
 
-        // Minimal stable payload (NO order/billTo details to avoid upstream 500s)
-        const payload: PayphonePreparePayload = {
+        // Payload EXACTO requerido por PayPhone
+        const payload = {
             amount,
             amountWithoutTax,
             clientTransactionId,
@@ -56,38 +100,60 @@ export async function POST(req: Request) {
             timeZone: -5,
         };
 
-        const result = await payphonePrepare(payload);
+        // Llamada a PayPhone usando Axios con reintentos
+        const result = await payphoneRequestWithRetry({
+            method: 'POST',
+            url: '/button/Prepare',
+            data: payload
+        }, 2, requestId);
 
         if (!result.ok) {
-            console.error('[PayPhone Prepare] Error:', result.status, result.text);
+            const isNonJson = !result.isJson;
+            console.error(`[PayPhone Prepare] [${requestId}] Request failed. Status: ${result.status}. Content-Type: ${result.contentType}`);
+
             return NextResponse.json({
                 ok: false,
-                error: "PayPhone Prepare failed (Upstream Error)",
-                upstreamStatus: result.status,
-                detail: result.isJson ? result.data : result.text?.slice(0, 800)
+                code: isNonJson ? "PAYPHONE_NON_JSON" : "PAYPHONE_ERROR",
+                status: result.status,
+                message: isNonJson ? "PayPhone returned an invalid response (HTML/Text)" : "PayPhone request failed",
+                snippet: result.snippet,
+                requestId
             }, { status: 502 });
         }
 
-        const { payWithCard, paymentId } = result.data;
+        // PayPhone returns payWithCard and payWithPayPhone (fallback is PayPhone index)
+        const { payWithCard, payWithPayPhone, paymentId } = result.data;
 
-        // Update Sale with PayPhone data
+        // Actualizar la venta
         await prisma.sale.update({
             where: { id: saleId },
             data: {
                 payphonePaymentId: String(paymentId),
-                clientTransactionId: clientTransactionId
+                clientTransactionId: clientTransactionId,
+                payWithCardUrl: payWithCard,
+                preparedAt: new Date()
             }
         });
 
         return NextResponse.json({
             ok: true,
-            payWithCard,
-            paymentId,
-            clientTransactionId
+            data: {
+                payWithPayPhone, // Priorizar este en el front
+                payWithCard,      // Fallback
+                paymentId,
+                clientTransactionId
+            }
         });
 
     } catch (error: any) {
-        console.error('[PayPhone Prepare API] Crash:', error);
-        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+        console.error(`[PayPhone Prepare API] [${requestId}] Crash:`, error);
+        return NextResponse.json({
+            ok: false,
+            code: "INTERNAL_SERVER_ERROR",
+            message: error.message || "Internal Server Error",
+            requestId
+        }, { status: 500 });
     }
 }
+
+

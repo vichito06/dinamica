@@ -103,6 +103,15 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
     try {
+        // SECURITY: Require secret to list sales (Strict check)
+        const secret = request.headers.get('x-test-secret');
+        const VALID_SECRET = process.env.TEST_SECRET || process.env.PAYPHONE_DEBUG_SECRET;
+
+        if (!secret || secret !== VALID_SECRET) {
+            console.warn(`[Sales API] Unauthorized GET attempt from ${request.headers.get('x-forwarded-for') || 'unknown'}`);
+            return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(request.url);
         const q = searchParams.get('q');
 
@@ -111,7 +120,7 @@ export async function GET(request: Request) {
         if (q) {
             const isNumeric = /^\d+$/.test(q);
             if (isNumeric) {
-                // Search by ticket number or ID number
+                // Search by ticket number or ID number (internal query allowed)
                 whereClause = {
                     OR: [
                         { tickets: { some: { number: parseInt(q) } } },
@@ -119,7 +128,7 @@ export async function GET(request: Request) {
                     ]
                 };
             } else {
-                // Search by name or email
+                // Search by name or email (internal query allowed)
                 whereClause = {
                     OR: [
                         { customer: { firstName: { contains: q, mode: 'insensitive' } } },
@@ -133,32 +142,28 @@ export async function GET(request: Request) {
         const sales = await prisma.sale.findMany({
             where: whereClause,
             include: {
-                customer: true,
                 tickets: true
+                // STRICT: DO NOT INCLUDE CUSTOMER HERE TO AVOID LEAKS
             },
             orderBy: { createdAt: 'desc' },
-            take: 100 // Limit to 100 for now
+            take: 100
         });
 
-        // Format for frontend
+        // Format for frontend - MINIMAL FIELDS ONLY (NO PII)
         const formattedSales = sales.map(s => ({
             id: s.id,
             total: s.amountCents / 100,
-            date: s.createdAt,
             status: s.status,
-            customerId: s.customerId, // Required for frontend filtering
-            customer: {
-                ...s.customer,
-                fullName: `${s.customer.lastName} ${s.customer.firstName}`
-            },
-            tickets: s.tickets.map(t => t.number.toString().padStart(4, '0')),
-            email: s.customer.email // Top level for table compatibility
+            date: s.createdAt,
+            tickets: s.tickets.map(t => t.number.toString().padStart(4, '0'))
         }));
 
         return NextResponse.json(formattedSales);
 
     } catch (error) {
-        console.error('Error fetching sales:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        console.error('[Sales API] Error fetching sales:', error);
+        return NextResponse.json({ ok: false, error: 'Internal Server Error' }, { status: 500 });
     }
 }
+
+

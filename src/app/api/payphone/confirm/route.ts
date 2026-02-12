@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
-import { payphoneConfirm } from "@/lib/payphone-client";
+import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 
 export const runtime = "nodejs";
 
@@ -22,26 +22,32 @@ export async function POST(req: Request) {
 
         if (!sale) {
             console.error(`[PayPhone Confirm] Sale not found for clientTxId: ${clientTransactionId}`);
-            return NextResponse.json({ error: 'Sale not found match' }, { status: 404 });
+            return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
         }
 
-        // Idempotency
+        // Idempotency: Si ya está pagada, retornar ok sin reprocesar
         if (sale.status === SaleStatus.PAID) {
             return NextResponse.json({ ok: true, alreadyPaid: true });
         }
 
-        // Call PayPhone V2 Confirm
-        const result = await payphoneConfirm({
-            id: Number(id),
-            clientTxId: clientTransactionId
+        // Call PayPhone V2 Confirm using the Axios client
+        const result = await payphoneRequestWithRetry({
+            method: 'POST',
+            url: '/button/V2/Confirm',
+            data: {
+                id: Number(id),
+                clientTxId: clientTransactionId
+            }
         });
 
         if (!result.ok) {
-            console.error('[PayPhone Confirm] Error:', result.status, result.text);
+            const errorBody = result.isJson ? JSON.stringify(result.data) : (result.errorText || 'Unknown error');
+            console.error(`[PayPhone Confirm] Request failed. Status: ${result.status}. Body: ${errorBody.slice(0, 500)}`);
+
             return NextResponse.json({
+                ok: false,
                 error: "PayPhone Confirm failed",
-                upstreamStatus: result.status,
-                detail: result.isJson ? result.data : result.text?.slice(0, 800)
+                status: result.status
             }, { status: 502 });
         }
 
@@ -92,3 +98,4 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
