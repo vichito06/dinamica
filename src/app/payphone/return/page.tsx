@@ -36,6 +36,8 @@ function ReturnContent() {
                 if (response.ok && data.statusCode === 3) {
                     setStatus('success');
                     sessionStorage.removeItem('selectedNumbers');
+                    localStorage.removeItem('yvossoeee_selectedNumbers');
+                    localStorage.removeItem('yvossoeee_sessionId');
                 } else if (data.statusCode === 2) {
                     setStatus('error');
                     setMessage('El pago fue cancelado por el usuario.');
@@ -104,6 +106,10 @@ function ReturnContent() {
                         </button>
                         <Link
                             href="/"
+                            onClick={() => {
+                                localStorage.removeItem('yvossoeee_selectedNumbers');
+                                localStorage.removeItem('yvossoeee_sessionId');
+                            }}
                             className="text-white/50 hover:text-white text-sm"
                         >
                             Cancelar y volver al inicio

@@ -44,6 +44,7 @@ model Ticket {
   number        Int          @unique
   status        TicketStatus @default(AVAILABLE)
   reservedUntil DateTime?
+  sessionId     String? // For idempotent reservations
   saleId        String?
   sale          Sale?        @relation(fields: [saleId], references: [id])
 }

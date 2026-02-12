@@ -20,6 +20,16 @@ export default function NumberSelector() {
     const [soldTickets, setSoldTickets] = useState<string[]>([]);
 
     useEffect(() => {
+        // Load persist selection
+        const saved = localStorage.getItem('yvossoeee_selectedNumbers');
+        if (saved) {
+            try {
+                setSelectedNumbers(JSON.parse(saved));
+            } catch (e) {
+                console.error("Error loading saved numbers", e);
+            }
+        }
+
         // Fetch sold tickets
         fetch('/api/tickets/sold')
             .then(res => res.json())
@@ -66,6 +76,7 @@ export default function NumberSelector() {
                 }
 
                 setSelectedNumbers(newNumbers);
+                localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newNumbers));
             } catch (error) {
                 alert('No se pudieron generar todos los números solicitados (posiblemente agotados).');
             }
@@ -84,7 +95,9 @@ export default function NumberSelector() {
             }
 
             if (!selectedNumbers.includes(num)) {
-                setSelectedNumbers([...selectedNumbers, num]);
+                const newSelection = [...selectedNumbers, num];
+                setSelectedNumbers(newSelection);
+                localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newSelection));
                 setManualNumber('');
             } else {
                 alert('Este número ya está seleccionado');
@@ -93,12 +106,23 @@ export default function NumberSelector() {
     };
 
     const removeNumber = (num: number) => {
-        setSelectedNumbers(selectedNumbers.filter(n => n !== num));
+        const newSelection = selectedNumbers.filter(n => n !== num);
+        setSelectedNumbers(newSelection);
+        localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newSelection));
     };
 
     const handleContinue = () => {
         if (selectedNumbers.length > 0) {
-            sessionStorage.setItem('selectedNumbers', JSON.stringify(selectedNumbers));
+            // Generate or get sessionId
+            let sessionId = localStorage.getItem('yvossoeee_sessionId');
+            if (!sessionId) {
+                sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : Math.random().toString(36).substring(2);
+                localStorage.setItem('yvossoeee_sessionId', sessionId);
+            }
+
+            localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(selectedNumbers));
             router.push('/checkout');
         }
     };

@@ -30,22 +30,63 @@ export default function CheckoutPage() {
         postalCode: ''
     });
 
-    // Payment Data - Simply method
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [debugInfo, setDebugInfo] = useState<{
+        step: 'IDLE' | 'CREATE_SALE' | 'PREPARE' | 'REDIRECT' | 'ERROR';
+        saleId?: string;
+        prepareStatus?: number;
+        contentType?: string;
+        requestId?: string;
+        dataKeys?: string[];
+        urlDetected?: boolean;
+        error?: string;
+    }>({ step: 'IDLE' });
     const [paymentData, setPaymentData] = useState({
         paymentMethod: 'payphone'
     });
+    const [isReserving, setIsReserving] = useState(false);
 
     useEffect(() => {
-        const numbers = sessionStorage.getItem('selectedNumbers');
-        if (numbers) setSelectedNumbers(JSON.parse(numbers));
-        setSessionId(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2));
-    }, []);
+        // Load persist selection
+        const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
+        const savedSessionId = localStorage.getItem('yvossoeee_sessionId');
+
+        if (savedNumbers) {
+            try {
+                setSelectedNumbers(JSON.parse(savedNumbers));
+            } catch (e) {
+                console.error("Error parsing saved numbers", e);
+            }
+        } else {
+            // Check legacy sessionStorage for transition
+            const legacy = sessionStorage.getItem('selectedNumbers');
+            if (legacy) {
+                try {
+                    const parsed = JSON.parse(legacy);
+                    setSelectedNumbers(parsed);
+                    localStorage.setItem('yvossoeee_selectedNumbers', legacy);
+                } catch (e) { }
+            }
+        }
+
+        if (savedSessionId) {
+            setSessionId(savedSessionId);
+        } else {
+            const newSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : Math.random().toString(36).substring(2);
+            setSessionId(newSessionId);
+            localStorage.setItem('yvossoeee_sessionId', newSessionId);
+        }
+    }, [router]);
 
     const totalPrice = selectedNumbers.length;
 
     const handlePersonalDataSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isReserving) return;
 
+        setIsReserving(true);
         try {
             // Reserve tickets before proceeding to payment
             const response = await fetch('/api/tickets/reserve', {
@@ -57,29 +98,36 @@ export default function CheckoutPage() {
                 })
             });
 
+            const result = await response.json();
+            console.log('[Checkout] Reserve status:', response.status, 'code:', result.code);
+
             if (!response.ok) {
-                const result = await response.json();
-                alert(result.error || 'Error: Algunos tickets ya no están disponibles. Por favor selecciona otros.');
-                if (result.unavailable) {
-                    // Could highlight unavailable tickets, but redirecting is safer for MVP
+                const errorMsg = result.error || 'Error: Algunos tickets ya no están disponibles. Por favor selecciona otros.';
+                console.error('[Checkout] Reservation failed:', result);
+                alert(errorMsg);
+                if (result.code === 'TICKET_ALREADY_RESERVED' || result.unavailable) {
                     router.push('/');
                 }
                 return;
             }
 
+            console.log('[Checkout] Reservation successful');
             setCurrentStep('payment');
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Reservation error:', error);
-            alert('Error de conexión. Inténtalo de nuevo.');
+            alert(error.message || 'Error de conexión. Inténtalo de nuevo.');
+        } finally {
+            setIsReserving(false);
         }
     };
 
     const handlePaymentSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
+        setIsProcessing(true);
+        setDebugInfo({ step: 'CREATE_SALE' });
 
         try {
-            // New Payload for Payphone
             // 1. Create Sale PENDING / Reserve Tickets logic
             const response = await fetch('/api/sales', {
                 method: 'POST',
@@ -103,7 +151,14 @@ export default function CheckoutPage() {
                 })
             });
 
-            const result = await response.json();
+            let result;
+            const saleBodyText = await response.text();
+            try {
+                result = JSON.parse(saleBodyText);
+            } catch (err) {
+                console.error("[Checkout] Non-JSON response from /api/sales:", saleBodyText.slice(0, 500));
+                throw new Error("Respuesta inválida del servidor al crear la venta.");
+            }
 
             if (!response.ok) {
                 if (response.status === 409 || result.error) {
@@ -111,10 +166,14 @@ export default function CheckoutPage() {
                     router.push('/');
                     return;
                 }
-                throw new Error(result.error);
+                throw new Error(result.error || `Error al crear la venta (Status: ${response.status})`);
             }
 
-            const saleId = result.id;
+            // Robust saleId mapping
+            const saleId = result.id || result.saleId;
+            if (!saleId) throw new Error("No se pudo obtener el ID de la venta.");
+
+            setDebugInfo(prev => ({ ...prev, step: 'PREPARE', saleId }));
 
             // 2. Call /api/payphone/prepare with saleId
             const prepareResponse = await fetch('/api/payphone/prepare', {
@@ -123,52 +182,85 @@ export default function CheckoutPage() {
                 body: JSON.stringify({ saleId })
             });
 
-            const prepareData = await prepareResponse.json();
+            const contentType = prepareResponse.headers.get("content-type") || "";
+            const bodyText = await prepareResponse.text();
 
-            // Strict check based on `ok` field (Standardized JSON)
-            if (!prepareData.ok) {
-                console.error("Prepare error", prepareData);
-                const reqId = prepareData.requestId ? ` (ReqID: ${prepareData.requestId})` : "";
+            let json: any = null;
+            let parseError = null;
 
-                if (prepareData.missing) {
-                    throw new Error(`Configuración incompleta: ${prepareData.missing.join(', ')}${reqId}`);
+            if (contentType.includes("application/json")) {
+                try {
+                    json = JSON.parse(bodyText);
+                } catch (e) {
+                    parseError = e;
                 }
-                // Show clean error
-                throw new Error((prepareData.error || "Error al conectar con Payphone") + reqId);
             }
 
-            // 3. Redirect to payUrl (Robust check)
-            const url = prepareData.payUrl || prepareData.payWithCard || prepareData.payWithPayPhone;
+            // Secure Production Log
+            console.log(`[Checkout] [DEBUG] Prepare Status: ${prepareResponse.status}, OK: ${prepareResponse.ok}, Type: ${contentType}`);
 
-            if (!url) {
-                console.log("Respuesta prepare (success but no url):", prepareData);
-                const reqId = prepareData.requestId ? ` (ReqID: ${prepareData.requestId})` : "";
-                // Fallback manually if we have paymentId but no URL? Unlikely.
-                alert("PayPhone no devolvió un link de pago." + reqId);
-                return;
+            setDebugInfo(prev => ({
+                ...prev,
+                prepareStatus: prepareResponse.status,
+                contentType,
+                requestId: json?.requestId,
+                dataKeys: json?.data ? Object.keys(json.data) : []
+            }));
+
+            if (json) {
+                console.log(`[Checkout] [DEBUG] JSON Keys:`, {
+                    ok: json.ok,
+                    code: json.code,
+                    requestId: json.requestId,
+                    dataKeys: json.data ? Object.keys(json.data) : [],
+                    hasPayWithPayPhone: !!json.data?.payWithPayPhone,
+                    hasPayWithCard: !!json.data?.payWithCard
+                });
+            } else {
+                console.error(`[Checkout] [DEBUG] Non-JSON or Parse Error. Snippet:`, bodyText.slice(0, 500));
             }
 
-            // Attempt redirect, fallback to manual link UI
-            try {
-                window.location.assign(url);
-            } catch (err) {
-                console.error("Redirect failed:", err);
-                setManualPayUrl(url); // Show fallback UI
+            // 3. Extraction with multiple fallbacks for compatibility
+            const url = json?.data?.payWithPayPhone ||
+                json?.data?.payWithCard ||
+                json?.data?.payWithCardUrl ||
+                json?.data?.payWithPayPhoneUrl ||
+                json?.payWithPayPhone ||
+                json?.payWithCard;
+
+            // Handle errors or missing link
+            console.log('[Checkout] Prepare status:', prepareResponse.status, 'hasUrl:', !!url, 'requestId:', json?.requestId);
+
+            if (!prepareResponse.ok || !json?.ok || !url) {
+                const status = prepareResponse.status;
+                const code = json?.code || "NO_CODE";
+                const reqId = json?.requestId || "NO_ID";
+                const keys = json?.data ? Object.keys(json.data).join(',') : "no-data";
+
+                let errorMsg = `No se pudo obtener el link de pago.\n\nDetalles:\nStatus: ${status}\nCode: ${code}\nReqID: ${reqId}\nAvailable Data Keys: ${keys}`;
+
+                if (json?.code === "PAYPHONE_CIRCUIT_OPEN") {
+                    errorMsg = "Proveedor en pausa (Circuit Breaker), intenta en 60s.";
+                } else if (!json && !prepareResponse.ok) {
+                    errorMsg = `Error de red o servidor (${status}). Por favor revisa tu conexión.`;
+                } else if (json?.ok && !url) {
+                    errorMsg = `PayPhone respondió OK pero no envió URL.\nStatus: ${status}\nReqID: ${reqId}\nKeys: ${keys}`;
+                }
+
+                throw new Error(errorMsg);
             }
 
-            // Safety fallback if browser blocks redirect without throwing
-            setTimeout(() => {
-                setManualPayUrl(url);
-            }, 2000);
+            setDebugInfo(prev => ({ ...prev, step: 'REDIRECT', urlDetected: true }));
+
+            // 4. Standard Redirection
+            window.location.href = url;
 
         } catch (error: any) {
-            console.error('Error processing payment:', error);
-            // Check if error message is about missing config
-            if (error.message && error.message.includes("Configuración incompleta")) {
-                alert(error.message);
-            } else {
-                alert(`No se pudo iniciar el pago. ${error.message || ""}`);
-            }
+            console.error('Checkout error:', error);
+            setDebugInfo(prev => ({ ...prev, step: 'ERROR', error: error.message }));
+            alert(error.message || 'No se pudo iniciar el pago. Reintenta en unos segundos.');
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -325,6 +417,7 @@ export default function CheckoutPage() {
                                     data={personalData}
                                     setData={setPersonalData}
                                     onSubmit={handlePersonalDataSubmit}
+                                    loading={isReserving}
                                 />
                             )}
 
@@ -334,6 +427,7 @@ export default function CheckoutPage() {
                                     setData={setPaymentData}
                                     onSubmit={handlePaymentSubmit}
                                     onBack={() => setCurrentStep('personal')}
+                                    loading={isProcessing}
                                 />
                             )}
 
@@ -344,6 +438,59 @@ export default function CheckoutPage() {
                     </div>
                 </div>
             </div>
+
+            {/* DEBUG PANEL */}
+            {debugInfo.step !== 'IDLE' && (
+                <div className="fixed bottom-4 right-4 z-[9999] max-w-sm w-full">
+                    <div className="glass-strong border border-white/20 p-4 rounded-xl text-[10px] font-mono shadow-2xl overflow-hidden">
+                        <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
+                            <span className="text-orange-400 font-bold uppercase">PayPhone Debug (Live)</span>
+                            <button onClick={() => setDebugInfo({ step: 'IDLE' })} className="text-white/50 hover:text-white">✕</button>
+                        </div>
+                        <div className="space-y-1">
+                            <div className="flex justify-between">
+                                <span className="text-white/40">STEP:</span>
+                                <span className={`${debugInfo.step === 'ERROR' ? 'text-red-400' : 'text-green-400'} font-bold`}>{debugInfo.step}</span>
+                            </div>
+                            {debugInfo.saleId && (
+                                <div className="flex justify-between">
+                                    <span className="text-white/40">SALE_ID:</span>
+                                    <span className="text-white truncate ml-2">{debugInfo.saleId}</span>
+                                </div>
+                            )}
+                            {debugInfo.prepareStatus && (
+                                <div className="flex justify-between">
+                                    <span className="text-white/40">STATUS:</span>
+                                    <span className="text-white">{debugInfo.prepareStatus} ({debugInfo.contentType?.split(';')[0]})</span>
+                                </div>
+                            )}
+                            {debugInfo.requestId && (
+                                <div className="flex justify-between">
+                                    <span className="text-white/40">REQ_ID:</span>
+                                    <span className="text-white truncate ml-2">{debugInfo.requestId}</span>
+                                </div>
+                            )}
+                            {debugInfo.dataKeys && debugInfo.dataKeys.length > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-white/40">DATA_KEYS:</span>
+                                    <span className="text-white truncate ml-2">[{debugInfo.dataKeys.join(', ')}]</span>
+                                </div>
+                            )}
+                            {debugInfo.urlDetected && (
+                                <div className="flex justify-between">
+                                    <span className="text-white/40">URL_FOUND:</span>
+                                    <span className="text-green-400 font-bold">YES ✅</span>
+                                </div>
+                            )}
+                            {debugInfo.error && (
+                                <div className="mt-2 p-2 bg-red-500/20 border border-red-500/40 rounded text-red-200 break-words leading-tight">
+                                    {debugInfo.error}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -366,7 +513,7 @@ function StepIndicator({ number, title, active, completed }: any) {
 }
 
 // Personal Data Form
-function PersonalDataForm({ data, setData, onSubmit }: any) {
+function PersonalDataForm({ data, setData, onSubmit, loading }: any) {
     const router = useRouter();
     const isEcuador = data.country === 'Ecuador';
 
@@ -600,10 +747,20 @@ function PersonalDataForm({ data, setData, onSubmit }: any) {
                     {/* Back button removed from here */}
                     <button
                         type="submit"
-                        className="flex-1 py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg hover:shadow-white/30 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
+                        disabled={loading}
+                        className="flex-1 py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg hover:shadow-white/30 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        Continuar al Pago
-                        <ArrowRight className="w-5 h-5" />
+                        {loading ? (
+                            <>
+                                <RefreshCw className="w-5 h-5 animate-spin" />
+                                Reservando...
+                            </>
+                        ) : (
+                            <>
+                                Continuar al Pago
+                                <ArrowRight className="w-5 h-5" />
+                            </>
+                        )}
                     </button>
                 </div>
             </form>
@@ -612,18 +769,9 @@ function PersonalDataForm({ data, setData, onSubmit }: any) {
 }
 
 // Payment Form - Payphone Only
-function PaymentForm({ data, setData, onSubmit, onBack }: any) {
-    const [loading, setLoading] = useState(false);
-
+function PaymentForm({ data, setData, onSubmit, onBack, loading }: any) {
     const handleSubmit = async (e: React.FormEvent) => {
-        setLoading(true);
         await onSubmit(e);
-        // If onSubmit fails/throws, we might want to reset loading, but 
-        // usually we redirect or show alert. 
-        // In the main component, on error we should probably allow retry. 
-        // For now let's rely on the parent to handle errors, but we can't easily reset loading here without a prop.
-        // Actually, the parent `handlePaymentSubmit` is async. We can wrap it.
-        setLoading(false);
     };
 
     return (

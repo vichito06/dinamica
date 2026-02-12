@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { personalData, tickets, total } = body;
+        const { personalData, tickets, total, sessionId } = body;
 
         // 1. Validation
         if (!tickets || tickets.length === 0) {
@@ -29,7 +29,9 @@ export async function POST(request: Request) {
             const now = new Date();
             const unavailable = existingTickets.filter(t =>
                 t.status === TicketStatus.SOLD ||
-                (t.status === TicketStatus.HELD && t.reservedUntil && t.reservedUntil > now)
+                (t.status === TicketStatus.HELD &&
+                    t.reservedUntil && t.reservedUntil > now &&
+                    t.sessionId !== sessionId) // Allow if held by the same session
             );
 
             if (unavailable.length > 0) {
@@ -77,12 +79,14 @@ export async function POST(request: Request) {
                     update: {
                         status: TicketStatus.HELD,
                         saleId: sale.id,
+                        sessionId: sessionId,
                         reservedUntil: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes hold
                     },
                     create: {
                         number: num,
                         status: TicketStatus.HELD,
                         saleId: sale.id,
+                        sessionId: sessionId,
                         reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
                     }
                 });
