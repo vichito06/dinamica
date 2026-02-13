@@ -6,8 +6,17 @@ import { SaleStatus } from '@prisma/client';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { cookies } from 'next/headers';
+
 export async function GET() {
     try {
+        const cookieStore = await cookies();
+        const isAdmin = cookieStore.get('admin_auth')?.value === 'true';
+
+        if (!isAdmin) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const customers = await prisma.customer.findMany({
             include: {
                 sales: {

@@ -146,8 +146,18 @@ function DashboardView() {
         // Fetch sales data
         fetch('/api/sales')
             .then(res => res.json())
-            .then(data => setSales(data))
-            .catch(err => console.error(err));
+            .then(data => {
+                if (Array.isArray(data)) {
+                    setSales(data);
+                } else {
+                    console.error('Expected sales array but got:', data);
+                    setSales([]);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching sales:', err);
+                setSales([]);
+            });
     }, []);
 
     // Derived Stats
@@ -165,26 +175,26 @@ function DashboardView() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
                 <StatsCard
                     title="Visitas Hoy"
-                    value={analytics.unique.toLocaleString()}
+                    value={(analytics.unique ?? 0).toLocaleString()}
                     icon={<Eye className="w-6 h-6 text-white" />}
                     gradient="bg-pink-600"
                     trend="Únicos"
                 />
                 <StatsCard
                     title="Total Vendido"
-                    value={`$${totalVendido}`}
+                    value={`$${(totalVendido ?? 0)}`}
                     icon={<DollarSign className="w-6 h-6 text-white" />}
                     gradient="bg-emerald-600"
                 />
                 <StatsCard
                     title="Tickets Vendidos"
-                    value={totalTickets.toString()}
+                    value={(totalTickets ?? 0).toString()}
                     icon={<TrendingUp className="w-6 h-6 text-white" />}
                     gradient="bg-blue-600"
                 />
                 <StatsCard
                     title="Compradores"
-                    value={uniqueBuyers.toString()}
+                    value={(uniqueBuyers ?? 0).toString()}
                     icon={<Users className="w-6 h-6 text-white" />}
                     gradient="bg-purple-600"
                 />

@@ -30,7 +30,7 @@ export default function CheckoutPage() {
         postalCode: ''
     });
 
-    const [isProcessing, setIsProcessing] = useState(false);
+    const [isPaying, setIsPaying] = useState(false);
     const [debugInfo, setDebugInfo] = useState<{
         step: 'IDLE' | 'CREATE_SALE' | 'PREPARE' | 'REDIRECT' | 'ERROR';
         saleId?: string;
@@ -45,6 +45,12 @@ export default function CheckoutPage() {
         paymentMethod: 'payphone'
     });
     const [isReserving, setIsReserving] = useState(false);
+    const searchParams = useSearchParams();
+
+    // Debug Mode Logic: dev mode OR ?debug=1
+    // (Explicitly hide if ?debug=0)
+    const debugParam = searchParams.get('debug');
+    const isDebugMode = debugParam === '1' || (process.env.NODE_ENV === 'development' && debugParam !== '0');
 
     useEffect(() => {
         // Load persist selection
@@ -124,7 +130,11 @@ export default function CheckoutPage() {
 
     const handlePaymentSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
-        setIsProcessing(true);
+
+        // 1) Evita doble prepare
+        if (isPaying) return;
+        setIsPaying(true);
+
         setDebugInfo({ step: 'CREATE_SALE' });
 
         try {
@@ -175,10 +185,11 @@ export default function CheckoutPage() {
 
             setDebugInfo(prev => ({ ...prev, step: 'PREPARE', saleId }));
 
-            // 2. Call /api/payphone/prepare with saleId
+            // 2. Call /api/payphone/prepare with saleId (cache: no-store added as requested)
             const prepareResponse = await fetch('/api/payphone/prepare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store',
                 body: JSON.stringify({ saleId })
             });
 
@@ -191,6 +202,9 @@ export default function CheckoutPage() {
             if (contentType.includes("application/json")) {
                 try {
                     json = JSON.parse(bodyText);
+                    // 2) Guarda para debug (por si te redirige y devtools no muestra Response)
+                    localStorage.setItem("last_payphone_prepare", JSON.stringify(json));
+                    console.log("PAYPHONE_PREPARE", json);
                 } catch (e) {
                     parseError = e;
                 }
@@ -220,13 +234,15 @@ export default function CheckoutPage() {
                 console.error(`[Checkout] [DEBUG] Non-JSON or Parse Error. Snippet:`, bodyText.slice(0, 500));
             }
 
-            // 3. Extraction with multiple fallbacks for compatibility
-            const url = json?.data?.payWithPayPhone ||
-                json?.data?.payWithCard ||
-                json?.data?.payWithCardUrl ||
-                json?.data?.payWithPayPhoneUrl ||
-                json?.payWithPayPhone ||
-                json?.payWithCard;
+            // 3) DIRECTO A TARJETA (Priority: payWithCard)
+            // Extraemos de json?.data o de la raíz del JSON según lo que devuelva el API
+            const data = json?.data || json;
+            const url = data?.payWithCard ||
+                data?.payWithPayPhone ||
+                data?.payWithCardUrl ||
+                data?.payWithPayPhoneUrl ||
+                data?.url ||
+                data?.paymentLink;
 
             // Handle errors or missing link
             console.log('[Checkout] Prepare status:', prepareResponse.status, 'hasUrl:', !!url, 'requestId:', json?.requestId);
@@ -252,15 +268,22 @@ export default function CheckoutPage() {
 
             setDebugInfo(prev => ({ ...prev, step: 'REDIRECT', urlDetected: true }));
 
-            // 4. Standard Redirection
-            window.location.href = url;
+            // 4. Standard Redirection - Use assign to prevent browser blocking
+            try {
+                window.location.assign(url);
+            } catch (err) {
+                console.error("[Checkout] Redirection blocked or failed:", err);
+                setIsPaying(false);
+                setManualPayUrl(url); // Show fallback button
+            }
 
         } catch (error: any) {
             console.error('Checkout error:', error);
             setDebugInfo(prev => ({ ...prev, step: 'ERROR', error: error.message }));
-            alert(error.message || 'No se pudo iniciar el pago. Reintenta en unos segundos.');
+            alert(error.message || 'No se pudo iniciar el pago. Intenta nuevamente.');
+            setIsPaying(false); // ✅ Permitir reintento si falla
         } finally {
-            setIsProcessing(false);
+            // No reset isPaying here because we are redirecting away on success
         }
     };
 
@@ -272,33 +295,30 @@ export default function CheckoutPage() {
         return (
             <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">
                 <div className="glass-strong p-8 rounded-2xl max-w-md w-full text-center">
-                    <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-                    <h2 className="text-xl font-bold text-white mb-2">Redirección automática falló</h2>
-                    <p className="text-white/70 mb-6">
-                        No pudimos abrir la ventana de pago automáticamente. Por favor haz clic en el botón de abajo.
+                    <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CreditCard className="w-8 h-8 text-orange-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">¡Link de Pago Listo!</h2>
+                    <p className="text-white/70 mb-8">
+                        Si no fuiste redirigido automáticamente, haz clic abajo para completar tu pago de forma segura en PayPhone.
                     </p>
-                    <a
-                        href={manualPayUrl}
-                        className="block w-full py-4 bg-orange-600 text-white font-bold rounded-xl hover:bg-orange-700 transition-colors uppercase tracking-wide mb-4"
+                    <button
+                        onClick={() => window.location.assign(manualPayUrl)}
+                        className="block w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/40 transition-all hover:scale-[1.02] active:scale-[0.98] uppercase tracking-wide mb-4 text-lg"
                     >
-                        Pagar con PayPhone
-                    </a>
+                        Abrir Link de Pago
+                    </button>
                     <button
                         onClick={() => setManualPayUrl(null)}
-                        className="text-white/50 hover:text-white underline text-sm"
+                        className="text-white/40 hover:text-white transition-colors text-sm font-medium"
                     >
-                        Volver
+                        <ArrowLeft className="w-4 h-4 inline mr-1" />
+                        Regresar al Checkout
                     </button>
                 </div>
             </div>
         );
     }
-
-    // ... (rest of the component)
-
-    // And update handlePaymentSubmit logic inside the PaymentForm component or parent:
-    // Actually `handlePaymentSubmit` is in `CheckoutPage`. I will modify logic there.
-
 
     if (!selectedNumbers.length) {
         return (
@@ -427,7 +447,7 @@ export default function CheckoutPage() {
                                     setData={setPaymentData}
                                     onSubmit={handlePaymentSubmit}
                                     onBack={() => setCurrentStep('personal')}
-                                    loading={isProcessing}
+                                    loading={isPaying}
                                 />
                             )}
 
@@ -440,7 +460,7 @@ export default function CheckoutPage() {
             </div>
 
             {/* DEBUG PANEL */}
-            {debugInfo.step !== 'IDLE' && (
+            {isDebugMode && debugInfo.step !== 'IDLE' && (
                 <div className="fixed bottom-4 right-4 z-[9999] max-w-sm w-full">
                     <div className="glass-strong border border-white/20 p-4 rounded-xl text-[10px] font-mono shadow-2xl overflow-hidden">
                         <div className="flex justify-between items-center mb-2 border-b border-white/10 pb-1">
@@ -829,7 +849,7 @@ function PaymentForm({ data, setData, onSubmit, onBack, loading }: any) {
                         {loading ? (
                             <>
                                 <RefreshCw className="w-6 h-6 animate-spin" />
-                                Redirigiendo...
+                                Procesando...
                             </>
                         ) : (
                             <>

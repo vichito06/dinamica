@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Prisma, SaleStatus, TicketStatus } from '@prisma/client';
+import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -107,11 +108,14 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
     try {
-        // SECURITY: Require secret to list sales (Strict check)
+        // SECURITY: Allow access if secret is provided OR if user has an admin session
         const secret = request.headers.get('x-test-secret');
         const VALID_SECRET = process.env.TEST_SECRET || process.env.PAYPHONE_DEBUG_SECRET;
 
-        if (!secret || secret !== VALID_SECRET) {
+        const cookieStore = await cookies();
+        const isAdmin = cookieStore.get('admin_auth')?.value === 'true';
+
+        if (!isAdmin && (!secret || secret !== VALID_SECRET)) {
             console.warn(`[Sales API] Unauthorized GET attempt from ${request.headers.get('x-forwarded-for') || 'unknown'}`);
             return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -146,19 +150,29 @@ export async function GET(request: Request) {
         const sales = await prisma.sale.findMany({
             where: whereClause,
             include: {
-                tickets: true
-                // STRICT: DO NOT INCLUDE CUSTOMER HERE TO AVOID LEAKS
+                tickets: true,
+                customer: true // Include customer for authorized admin view
             },
             orderBy: { createdAt: 'desc' },
             take: 100
         });
 
-        // Format for frontend - MINIMAL FIELDS ONLY (NO PII)
+        // Format for frontend - Return what the Admin Panel expects
         const formattedSales = sales.map(s => ({
             id: s.id,
             total: s.amountCents / 100,
             status: s.status,
             date: s.createdAt,
+            customerId: s.customerId,
+            customer: {
+                id: s.customer.id,
+                firstName: s.customer.firstName,
+                lastName: s.customer.lastName,
+                fullName: `${s.customer.lastName} ${s.customer.firstName}`.trim(),
+                email: s.customer.email,
+                phone: s.customer.phone,
+                idNumber: s.customer.idNumber
+            },
             tickets: s.tickets.map(t => t.number.toString().padStart(4, '0'))
         }));
 
