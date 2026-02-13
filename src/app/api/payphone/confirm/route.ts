@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
+import { sendTicketsEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,10 @@ export async function POST(req: Request) {
 
         const sale = await prisma.sale.findUnique({
             where: { clientTransactionId },
-            include: { tickets: true }
+            include: {
+                tickets: { orderBy: { number: 'asc' } },
+                customer: true
+            }
         });
 
         if (!sale) {
@@ -25,9 +29,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
         }
 
-        // Idempotency: Si ya está pagada, retornar ok sin reprocesar
+        // Idempotency: Si ya está pagada, retornar ok + tickets sin reprocesar
         if (sale.status === SaleStatus.PAID) {
-            return NextResponse.json({ ok: true, alreadyPaid: true });
+            return NextResponse.json({
+                ok: true,
+                alreadyPaid: true,
+                statusCode: 3,
+                saleId: sale.id,
+                ticketNumbers: sale.tickets.map(t => t.number.toString().padStart(4, '0')),
+                emailSent: true // Assume sent if already paid
+            });
         }
 
         // Call PayPhone V2 Confirm using the Axios client
@@ -56,6 +67,9 @@ export async function POST(req: Request) {
         const isPaid = data.statusCode === 3;
         const isCanceled = data.statusCode === 2;
 
+        let ticketNumbers: string[] = sale.tickets.map(t => t.number.toString().padStart(4, '0'));
+        let emailSent = false;
+
         if (isPaid) {
             await prisma.$transaction([
                 prisma.sale.update({
@@ -73,6 +87,22 @@ export async function POST(req: Request) {
                 })
             ]);
             console.log(`[PayPhone Confirm] Sale ${sale.id} confirmed as PAID`);
+
+            // Intentar enviar correo
+            try {
+                const emailResult = await sendTicketsEmail({
+                    to: sale.customer.email,
+                    customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
+                    saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
+                    tickets: ticketNumbers,
+                    total: sale.amountCents / 100
+                });
+                emailSent = emailResult.success;
+            } catch (emailErr) {
+                console.error("[PayPhone Confirm] Email sending failed:", emailErr);
+                emailSent = false;
+            }
+
         } else if (isCanceled) {
             await prisma.$transaction([
                 prisma.sale.update({
@@ -90,7 +120,10 @@ export async function POST(req: Request) {
         return NextResponse.json({
             ok: true,
             status: data.status,
-            statusCode: data.statusCode
+            statusCode: data.statusCode,
+            saleId: sale.id,
+            ticketNumbers: isPaid ? ticketNumbers : [],
+            emailSent: emailSent
         });
 
     } catch (error: any) {
