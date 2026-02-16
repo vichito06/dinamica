@@ -28,9 +28,7 @@ export interface Customer {
     idNumber: string;
     phone: string;
     country: string;
-    province: string;
     city: string;
-    postalCode?: string;
 }
 
 export interface CustomerRecord extends Customer {

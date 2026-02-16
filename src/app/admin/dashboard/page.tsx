@@ -956,7 +956,7 @@ function DrawView() {
                             <h3 className="text-5xl font-black text-white tracking-tight mb-2">
                                 {winner.customer.fullName}
                             </h3>
-                            <p className="text-white/50 text-xl">{winner.customer.city}, {winner.customer.province}</p>
+                            <p className="text-white/50 text-xl">{winner.customer.city}</p>
                         </div>
 
                         <div className="grid md:grid-cols-2 gap-8 mt-8">
@@ -1164,7 +1164,7 @@ function CustomersView() {
                                     <div className="space-y-2">
                                         <p className="text-white text-sm capitalize flex items-center gap-2">
                                             <MapPin className="w-3 h-3 text-pink-400" />
-                                            {selectedCustomer.city || "Sin ciudad"}, {selectedCustomer.province || "Sin provincia"}
+                                            {selectedCustomer.city || "Sin ciudad"}
                                         </p>
                                         <p className="text-white/40 text-xs italic ml-5">{selectedCustomer.country}</p>
                                     </div>

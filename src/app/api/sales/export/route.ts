@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 
     // 3. Headers (using ; as separator)
     const headers = [
-        "ID", "Cliente", "Cédula", "Email", "Teléfono", "Provincia", "Ciudad",
+        "ID", "Cliente", "Cédula", "Email", "Teléfono", "Ciudad",
         "CantTickets", "Total", "Fecha", "Tickets", "MétodoPago", "EstadoPago", "TransacciónID"
     ];
 
@@ -51,7 +51,6 @@ export async function GET(req: NextRequest) {
             c.idNumber || "",
             c.email || "",
             c.phone || "",
-            c.province || "",
             c.city || "",
             sale.tickets?.length || 0,
             sale.total || 0,

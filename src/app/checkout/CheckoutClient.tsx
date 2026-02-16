@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw } from 'lucide-react';
+import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw, XCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -18,19 +18,16 @@ export default function CheckoutClient() {
 
     // Personal Data
     const [personalData, setPersonalData] = useState({
-        firstName: '',
-        lastName: '',
-        // name property will be composed on submission
+        fullName: '',
         email: '',
         phone: '',
         idNumber: '',
         country: 'Ecuador',
-        province: '',
         city: '',
-        postalCode: ''
     });
 
     const [isPaying, setIsPaying] = useState(false);
+    const payingRef = useRef(false);
     const [debugInfo, setDebugInfo] = useState<{
         step: 'IDLE' | 'CREATE_SALE' | 'PREPARE' | 'REDIRECT' | 'ERROR';
         saleId?: string;
@@ -92,6 +89,13 @@ export default function CheckoutClient() {
         e.preventDefault();
         if (isReserving) return;
 
+        // Validation: minimum 2 words for fullName
+        const nameParts = personalData.fullName.trim().split(/\s+/);
+        if (nameParts.length < 2) {
+            alert('Por favor ingressa tu nombre completo (Nombre y Apellido).');
+            return;
+        }
+
         setIsReserving(true);
         try {
             // Reserve tickets before proceeding to payment
@@ -128,32 +132,42 @@ export default function CheckoutClient() {
         }
     };
 
+    const splitFullName = (name: string) => {
+        const parts = name.trim().toUpperCase().split(/\s+/);
+        if (parts.length === 1) return { first: parts[0], last: '' };
+
+        const last = parts.slice(-1).join(' '); // Simple: last word is lastName
+        const first = parts.slice(0, -1).join(' '); // The rest is firstName
+        return { first, last };
+    };
+
     const handlePaymentSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
 
-        // 1) Evita doble prepare
-        if (isPaying) return;
+        // 1) Evita doble POST con ref síncrona
+        if (payingRef.current) return;
+        payingRef.current = true;
         setIsPaying(true);
 
         setDebugInfo({ step: 'CREATE_SALE' });
 
         try {
+            const { first, last } = splitFullName(personalData.fullName);
+
             // 1. Create Sale PENDING / Reserve Tickets logic
             const response = await fetch('/api/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     personalData: {
-                        firstName: personalData.firstName,
-                        lastName: personalData.lastName,
+                        firstName: first,
+                        lastName: last,
                         email: personalData.email,
                         phone: personalData.phone,
                         idNumber: personalData.idNumber,
                         country: personalData.country,
-                        province: personalData.province,
                         city: personalData.city,
-                        postalCode: personalData.postalCode || '',
-                        name: `${personalData.lastName} ${personalData.firstName}`.trim()
+                        name: personalData.fullName.toUpperCase().trim()
                     },
                     tickets: selectedNumbers,
                     total: totalPrice,
@@ -283,7 +297,35 @@ export default function CheckoutClient() {
             alert(error.message || 'No se pudo iniciar el pago. Intenta nuevamente.');
             setIsPaying(false); // ✅ Permitir reintento si falla
         } finally {
-            // No reset isPaying here because we are redirecting away on success
+            // si falla o termina, libera el candado
+            payingRef.current = false;
+            setIsPaying(false);
+        }
+    };
+
+    const handleRemoveTicket = async (ticket: number) => {
+        const confirmMsg = `¿Estás seguro de que quieres eliminar el ticket ${ticket.toString().padStart(4, '0')}?`;
+        if (!window.confirm(confirmMsg)) return;
+
+        if (currentStep === 'payment') {
+            try {
+                // Liberate ticket on backend if already reserved (Payment step)
+                await fetch('/api/tickets/release', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketNumber: ticket, sessionId })
+                });
+            } catch (e) {
+                console.error("Error releasing ticket", e);
+            }
+        }
+
+        const newNumbers = selectedNumbers.filter(n => n !== ticket);
+        setSelectedNumbers(newNumbers);
+        localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newNumbers));
+
+        if (newNumbers.length === 0) {
+            router.push('/');
         }
     };
 
@@ -400,18 +442,25 @@ export default function CheckoutClient() {
                                 {/* Bloque Seleccionados con Divisor */}
                                 <div>
                                     <div className="text-white/60 text-xs mb-2 font-medium">Números Seleccionados ({selectedNumbers.length})</div>
-                                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
-                                        {selectedNumbers.slice(0, 9).map((num) => (
+                                    <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                                        {selectedNumbers.slice(0, 15).map((num) => (
                                             <div
                                                 key={num}
-                                                className="p-2 bg-white/10 border border-white/10 text-white rounded text-center font-mono font-bold text-xs"
+                                                className="group relative p-2 bg-white/10 border border-white/10 text-white rounded text-center font-mono font-bold text-xs flex items-center justify-center gap-2"
                                             >
                                                 {num.toString().padStart(4, '0')}
+                                                <button
+                                                    onClick={() => handleRemoveTicket(num)}
+                                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-500 rounded flex-shrink-0"
+                                                    title="Eliminar"
+                                                >
+                                                    <XCircle className="w-3 h-3" />
+                                                </button>
                                             </div>
                                         ))}
                                     </div>
-                                    {selectedNumbers.length > 9 && (
-                                        <p className="text-white/50 text-xs mt-2">+{selectedNumbers.length - 9} más</p>
+                                    {selectedNumbers.length > 15 && (
+                                        <p className="text-white/50 text-xs mt-2 text-center">+{selectedNumbers.length - 15} más</p>
                                     )}
                                 </div>
 
@@ -574,36 +623,19 @@ function PersonalDataForm({ data, setData, onSubmit, loading }: any) {
                 </div>
 
                 {/* Name */}
-                {/* Name & Last Name */}
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block text-white/80 mb-3 font-medium flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            Apellidos *
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            value={data.lastName}
-                            onChange={(e) => setData({ ...data, lastName: e.target.value.toUpperCase() })}
-                            placeholder="PÉREZ GARCÍA"
-                            className="w-full input-field py-4"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-white/80 mb-3 font-medium flex items-center gap-2">
-                            <User className="w-4 h-4" />
-                            Nombres *
-                        </label>
-                        <input
-                            type="text"
-                            required
-                            value={data.firstName}
-                            onChange={(e) => setData({ ...data, firstName: e.target.value.toUpperCase() })}
-                            placeholder="JUAN CARLOS"
-                            className="w-full input-field py-4"
-                        />
-                    </div>
+                <div>
+                    <label className="block text-white/80 mb-3 font-medium flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Nombre completo *
+                    </label>
+                    <input
+                        type="text"
+                        required
+                        value={data.fullName}
+                        onChange={(e) => setData({ ...data, fullName: e.target.value.toUpperCase() })}
+                        placeholder="JUAN PÉREZ GARCÍA"
+                        className="w-full input-field py-4"
+                    />
                 </div>
 
 
@@ -666,87 +698,36 @@ function PersonalDataForm({ data, setData, onSubmit, loading }: any) {
                     <>
                         <div>
                             <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
-                                <MapPin className="w-4 h-4" />
-                                Provincia *
-                            </label>
-                            <select
-                                required
-                                value={data.province}
-                                onChange={(e) => setData({ ...data, province: e.target.value })}
-                                className="w-full input-field"
-                            >
-                                <option value="" style={{ color: '#111', backgroundColor: '#fff' }}>Selecciona una provincia</option>
-                                {ECUADOR_PROVINCES.map((province) => (
-                                    <option key={province} value={province} style={{ color: '#111', backgroundColor: '#fff' }}>{province}</option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
-                                    <Building className="w-4 h-4" />
-                                    Cantón/Ciudad *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={data.city}
-                                    onChange={(e) => setData({ ...data, city: e.target.value })}
-                                    placeholder="Quito, Guayaquil, etc."
-                                    className="w-full input-field"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
-                                    <Hash className="w-4 h-4" />
-                                    Código Postal *
-                                </label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={data.postalCode}
-                                    onChange={(e) => setData({ ...data, postalCode: e.target.value })}
-                                    placeholder="170150"
-                                    className="w-full input-field"
-                                />
-                            </div>
-                        </div>
-                    </>
-                )}
-
-                {/* For non-Ecuador countries */}
-                {!isEcuador && data.country && (
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
                                 <Building className="w-4 h-4" />
-                                Ciudad *
+                                Cantón/Ciudad *
                             </label>
                             <input
                                 type="text"
                                 required
                                 value={data.city}
                                 onChange={(e) => setData({ ...data, city: e.target.value })}
-                                placeholder="Ciudad"
+                                placeholder="Quito, Guayaquil, etc."
                                 className="w-full input-field"
                             />
                         </div>
+                    </>
+                )}
 
-                        <div>
-                            <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
-                                <Hash className="w-4 h-4" />
-                                Código Postal
-                            </label>
-                            <input
-                                type="text"
-                                value={data.postalCode}
-                                onChange={(e) => setData({ ...data, postalCode: e.target.value })}
-                                placeholder="12345"
-                                className="w-full input-field"
-                            />
-                        </div>
+                {/* For non-Ecuador countries */}
+                {!isEcuador && data.country && (
+                    <div>
+                        <label className="block text-white/80 mb-2 font-medium flex items-center gap-2">
+                            <Building className="w-4 h-4" />
+                            Ciudad *
+                        </label>
+                        <input
+                            type="text"
+                            required
+                            value={data.city}
+                            onChange={(e) => setData({ ...data, city: e.target.value })}
+                            placeholder="Ciudad"
+                            className="w-full input-field"
+                        />
                     </div>
                 )}
 

@@ -1,9 +1,11 @@
 
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import crypto from 'crypto';
 import { SaleStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 
+export const maxDuration = 60;
 export const runtime = "nodejs";
 
 function mustEnv(name: string) {
@@ -81,20 +83,52 @@ export async function POST(req: Request) {
             }, { status: 400 });
         }
 
-        const amount = Math.round(sale.amountCents);
-        const amountWithoutTax = amount;
+        // Cálculo de montos en CENTAVOS (Requerido por PayPhone: $1.00 = 100)
+        const qty = sale.tickets.length;
+        const ticketPriceCents = 100; // $1.00 por ticket
+        const amountCents = qty * ticketPriceCents;
+        const totalUsd = amountCents / 100;
+
+        // Logs SOLO para admin/debug
+        const isAdmin = req.headers.get("cookie")?.includes("admin_auth=true") ||
+            req.headers.get("x-test-secret") === process.env.TEST_SECRET;
+
+        if (isAdmin) {
+            console.log(`[PayPhone Prepare] [${requestId}] Calculation: USD:${totalUsd}, Cents:${amountCents}, Qty:${qty}, Price:${ticketPriceCents}`);
+        }
+
+        // Validación mínima: PayPhone requiere al menos $1
+        if (amountCents < 100) {
+            return NextResponse.json({
+                ok: false,
+                code: "AMOUNT_TOO_LOW",
+                message: "PayPhone requiere un monto mínimo de $1 (100 centavos).",
+                requestId
+            }, { status: 400 });
+        }
+
+        const amount = amountCents;
+        const amountWithoutTax = amountCents;
+        const amountWithTax = 0;
+        const tax = 0;
+        const service = 0;
+        const tip = 0;
 
         // Use a robust clientTransactionId (fixed to 16 chars)
         const clientTransactionId = (sale.clientTransactionId || `S${sale.id}_${Date.now()}`).slice(0, 16);
 
-        // Payload EXACTO requerido por PayPhone
+        // Payload EXACTO requerido por PayPhone (Debe cumplir: amount = sum of others)
         const payload = {
             amount,
             amountWithoutTax,
+            amountWithTax,
+            tax,
+            service,
+            tip,
             clientTransactionId,
             currency: "USD",
             storeId: STORE_ID,
-            reference: body.reference || `Rifa Dinámica #${saleId}`,
+            reference: "Y Voss Oeee — Compra de tickets",
             responseUrl: `${APP_URL}/payphone/return`,
             cancellationUrl: `${APP_URL}/payphone/cancel`,
             timeZone: -5,
@@ -108,17 +142,21 @@ export async function POST(req: Request) {
         }, 2, requestId);
 
         if (!result.ok) {
-            const isNonJson = !result.isJson;
-            console.error(`[PayPhone Prepare] [${requestId}] Request failed. Status: ${result.status}. Content-Type: ${result.contentType}`);
+            console.error(`[PayPhone Prepare] [${requestId}] Request failed. Status: ${result.status}`);
 
             return NextResponse.json({
                 ok: false,
-                code: isNonJson ? "PAYPHONE_NON_JSON" : "PAYPHONE_ERROR",
+                code: "PAYPHONE_REJECTED",
                 status: result.status,
-                message: isNonJson ? "PayPhone returned an invalid response (HTML/Text)" : "PayPhone request failed",
-                snippet: result.snippet,
+                message: "PayPhone ha rechazado el pago.",
+                payphone: result.data || result.snippet || "No response body",
+                debug: isAdmin ? {
+                    sentPayloadSummary: { amount, amountWithoutTax, amountWithTax, tax },
+                    rawPayphoneBody: result.data,
+                    contentType: result.contentType
+                } : undefined,
                 requestId
-            }, { status: 502 });
+            }, { status: 400 }); // Retornar 400 para que el front lo maneje como rechazo del proveedor
         }
 
         // PayPhone returns payWithCard and payWithPayPhone (fallback is PayPhone index)
@@ -138,8 +176,8 @@ export async function POST(req: Request) {
         return NextResponse.json({
             ok: true,
             data: {
-                payWithPayPhone, // Priorizar este en el front
-                payWithCard,      // Fallback
+                payWithPayPhone,
+                payWithCard,
                 paymentId,
                 clientTransactionId
             }
@@ -147,10 +185,22 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error(`[PayPhone Prepare API] [${requestId}] Crash:`, error);
+
+        const isAdmin = req.headers.get("cookie")?.includes("admin_auth=true") ||
+            req.headers.get("x-test-secret") === process.env.TEST_SECRET;
+
+        const sanitizedError = {
+            message: error?.message || "Internal Server Error",
+            code: error?.code,
+            meta: error?.meta,
+            stack: error?.stack?.split('\n').slice(0, 3).join('\n'),
+        };
+
         return NextResponse.json({
             ok: false,
-            code: "INTERNAL_SERVER_ERROR",
-            message: error.message || "Internal Server Error",
+            code: error.code || "INTERNAL_SERVER_ERROR",
+            message: "Error al preparar el pago. Intente nuevamente.",
+            debug: isAdmin ? sanitizedError : undefined,
             requestId
         }, { status: 500 });
     }

@@ -3,28 +3,39 @@ import { prisma } from '@/lib/prisma';
 import { Prisma, SaleStatus, TicketStatus } from '@prisma/client';
 import { cookies } from 'next/headers';
 
+// Explicitly set max duration for long-running transactions
+export const maxDuration = 60;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+    let requestId = "req_sales_" + Date.now();
     try {
+        try {
+            requestId = (globalThis as any).crypto?.randomUUID?.() || requestId;
+        } catch (e) { }
+
         const body = await request.json();
         const { personalData, tickets, total, sessionId } = body;
 
-        // 1. Validation
-        if (!tickets || tickets.length === 0) {
-            return NextResponse.json({ error: 'No tickets selected' }, { status: 400 });
+        // 1. Validation & sanitization
+        if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+            return NextResponse.json({ ok: false, error: 'No tickets selected', code: 'INVALID_INPUT', requestId }, { status: 400 });
         }
 
-        const ticketNumbers = tickets.map((t: any) => Number(t));
+        const ticketNumbers = tickets
+            .map((t: any) => parseInt(t, 10))
+            .filter(n => !isNaN(n));
+
+        if (ticketNumbers.length === 0) {
+            return NextResponse.json({ ok: false, error: 'Lista de tickets inválida.', code: 'INVALID_TICKETS', requestId }, { status: 400 });
+        }
 
         // 2. Transaction: Verify Availability + Create Customer/Sale + Reserve
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             // Check availability
             const existingTickets = await tx.ticket.findMany({
-                where: {
-                    number: { in: ticketNumbers },
-                }
+                where: { number: { in: ticketNumbers } }
             });
 
             const now = new Date();
@@ -32,17 +43,17 @@ export async function POST(request: Request) {
                 t.status === TicketStatus.SOLD ||
                 (t.status === TicketStatus.HELD &&
                     t.reservedUntil && t.reservedUntil > now &&
-                    t.sessionId !== sessionId) // Allow if held by the same session
+                    t.sessionId !== sessionId)
             );
 
             if (unavailable.length > 0) {
                 const unavailableNumbers = unavailable.map(t => t.number).join(', ');
-                throw new Error(`Los siguientes números ya no están disponibles: ${unavailableNumbers}`);
+                throw new Error(`DISPONIBILIDAD:${unavailableNumbers}`);
             }
 
             // Handle Customer (Upsert by Cédula)
             if (!personalData || !personalData.idNumber) {
-                throw new Error('Datos del cliente incompletos (Falta Cédula)');
+                throw new Error('DATOS_INCOMPLETOS:Falta Cédula');
             }
 
             const customer = await tx.customer.upsert({
@@ -73,36 +84,76 @@ export async function POST(request: Request) {
                 }
             });
 
-            // Hold Tickets (anti-duplicate)
-            for (const num of ticketNumbers) {
-                await tx.ticket.upsert({
-                    where: { number: num },
-                    update: {
+            // Hold Tickets (anti-duplicate) - Bulk optimization
+            const existingNumbers = existingTickets.map((t: { number: number }) => t.number);
+            const missingNumbers = ticketNumbers.filter((num: number) => !existingNumbers.includes(num));
+            const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
+
+            if (existingNumbers.length > 0) {
+                await tx.ticket.updateMany({
+                    where: { number: { in: existingNumbers } },
+                    data: {
                         status: TicketStatus.HELD,
                         saleId: sale.id,
                         sessionId: sessionId,
-                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000), // 10 minutes hold
-                    },
-                    create: {
-                        number: num,
-                        status: TicketStatus.HELD,
-                        saleId: sale.id,
-                        sessionId: sessionId,
-                        reservedUntil: new Date(now.getTime() + 10 * 60 * 1000),
+                        reservedUntil: expiresAt,
                     }
                 });
             }
 
+            if (missingNumbers.length > 0) {
+                await tx.ticket.createMany({
+                    data: missingNumbers.map((num: number) => ({
+                        number: num,
+                        status: TicketStatus.HELD,
+                        saleId: sale.id,
+                        sessionId: sessionId,
+                        reservedUntil: expiresAt,
+                    }))
+                });
+            }
+
             return sale;
+        }, {
+            timeout: 30000 // 30 seconds for sales creation
         });
 
-        console.log(`[Sales API] Sale created: ${result.id}`);
-        return NextResponse.json({ ok: true, sale: result, id: result.id });
+        console.log(`[Sales API] [${requestId}] Sale created: ${result.id}`);
+        return NextResponse.json({ ok: true, sale: result, id: result.id, requestId });
 
     } catch (error: any) {
-        console.error('Sale creation error:', error);
-        const status = error.message.includes('disponibles') ? 409 : 500;
-        return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status });
+        const isAdmin =
+            request.headers.get('cookie')?.includes('admin_auth=true') ||
+            request.headers.get('x-test-secret') === process.env.TEST_SECRET;
+
+        const sanitizedError = {
+            message: error?.message || 'Unknown Error',
+            code: error?.code,
+            meta: error?.meta,
+            stack: error?.stack?.split('\n').slice(0, 3).join('\n'),
+        };
+
+        console.error(`[Sales API] [${requestId}] ERROR:`, sanitizedError);
+
+        const debug = isAdmin ? sanitizedError : undefined;
+
+        if (error.message.startsWith('DISPONIBILIDAD:')) {
+            const nums = error.message.split(':')[1];
+            return NextResponse.json({
+                ok: false,
+                error: `Los números ya no están disponibles: ${nums}`,
+                code: 'UNAVAILABLE',
+                requestId
+            }, { status: 409 });
+        }
+
+        return NextResponse.json({
+            ok: false,
+            error: 'Error interno al crear el pedido. Intente con menos tickets.',
+            code: error.code || 'SALE_CREATE_FAILED',
+            requestId,
+            debug
+        }, { status: 500 });
     }
 }
 
