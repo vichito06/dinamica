@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Dices, Hash, ShoppingCart, Check, Loader2, ArrowRight } from 'lucide-react';
+import { isHardReload } from '@/lib/navigation';
 
 const MIN_NUMBER = 1;
 const MAX_NUMBER = 9999;
@@ -24,36 +25,52 @@ export default function NumberSelector() {
         if (hasReleasedOnMount.current) return;
         hasReleasedOnMount.current = true;
 
-        // 1. HARD RESET: Clear selection immediately on load/refresh
         const saved = localStorage.getItem('yvossoeee_selectedNumbers');
         const sessionId = localStorage.getItem('yvossoeee_sessionId');
 
-        // Always reset local state to empty
-        setSelectedNumbers([]);
+        // 1. HARD RESET: Clear selection ONLY on actual page reload (F5)
+        if (isHardReload()) {
+            console.log("[NumberSelector] Hard Reload detected: Clearing state zero");
 
-        // Remove from storage instantly to prevent rehydration or surviving double-renders
-        localStorage.removeItem('yvossoeee_selectedNumbers');
-        localStorage.removeItem('yvossoeee_sessionId');
-        localStorage.removeItem('selectedNumbers'); // Legacy
-        localStorage.removeItem('selectedTickets'); // Legacy
-        localStorage.removeItem('ticket-store');    // Legacy
-        sessionStorage.removeItem('selectedNumbers'); // Legacy
+            // Always reset local state to empty
+            setSelectedNumbers([]);
 
-        if (saved && sessionId) {
-            try {
-                const numbers = JSON.parse(saved);
-                if (Array.isArray(numbers) && numbers.length > 0) {
-                    console.log("[NumberSelector] Hard Reset: Releasing abandoned selection:", numbers);
+            // Remove from storage instantly to prevent rehydration or surviving double-renders
+            localStorage.removeItem('yvossoeee_selectedNumbers');
+            localStorage.removeItem('yvossoeee_sessionId');
+            localStorage.removeItem('selectedNumbers'); // Legacy
+            localStorage.removeItem('selectedTickets'); // Legacy
+            localStorage.removeItem('ticket-store');    // Legacy
+            sessionStorage.removeItem('selectedNumbers'); // Legacy
 
-                    // Trigger backend liberation (best effort, non-blocking)
-                    fetch('/api/tickets/release', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticketNumbers: numbers, sessionId })
-                    }).catch(err => console.error("[NumberSelector] Release failed:", err));
+            if (saved && sessionId) {
+                try {
+                    const numbers = JSON.parse(saved);
+                    if (Array.isArray(numbers) && numbers.length > 0) {
+                        console.log("[NumberSelector] Hard Reset: Releasing abandoned selection:", numbers);
+
+                        // Trigger backend liberation (best effort, non-blocking)
+                        fetch('/api/tickets/release', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ticketNumbers: numbers, sessionId })
+                        }).catch(err => console.error("[NumberSelector] Release failed:", err));
+                    }
+                } catch (e) {
+                    console.error("Error processing abandoned selection", e);
                 }
-            } catch (e) {
-                console.error("Error processing abandoned selection", e);
+            }
+        } else {
+            // 2. NORMAL NAVIGATION: Rehydrate if state exists
+            if (saved) {
+                try {
+                    const numbers = JSON.parse(saved);
+                    if (Array.isArray(numbers)) {
+                        setSelectedNumbers(numbers);
+                    }
+                } catch (e) {
+                    console.error("Error rehydrating selection", e);
+                }
             }
         }
 

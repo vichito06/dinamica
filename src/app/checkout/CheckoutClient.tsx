@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw, XCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { isHardReload } from '@/lib/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ECUADOR_PROVINCES, COUNTRIES } from '@/lib/data';
@@ -54,46 +55,65 @@ export default function CheckoutClient() {
         if (hasReleasedOnMount.current) return;
         hasReleasedOnMount.current = true;
 
-        // 1. HARD RESET: Clear and Redirect immediately on Refresh
         const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
         const savedSessionId = localStorage.getItem('yvossoeee_sessionId');
 
-        // Always ensure local state is clean
-        setSelectedNumbers([]);
+        // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5)
+        if (isHardReload()) {
+            // Always ensure local state is clean
+            setSelectedNumbers([]);
 
-        // Remove from storage instantly
-        localStorage.removeItem('yvossoeee_selectedNumbers');
-        localStorage.removeItem('yvossoeee_sessionId');
-        localStorage.removeItem('selectedNumbers'); // Legacy
-        localStorage.removeItem('selectedTickets'); // Legacy
-        localStorage.removeItem('ticket-store');    // Legacy
-        sessionStorage.removeItem('selectedNumbers'); // Legacy
+            // Remove from storage instantly
+            localStorage.removeItem('yvossoeee_selectedNumbers');
+            localStorage.removeItem('yvossoeee_sessionId');
+            localStorage.removeItem('selectedNumbers'); // Legacy
+            localStorage.removeItem('selectedTickets'); // Legacy
+            localStorage.removeItem('ticket-store');    // Legacy
+            sessionStorage.removeItem('selectedNumbers'); // Legacy
 
+            if (savedNumbers && savedSessionId) {
+                try {
+                    const numbers = JSON.parse(savedNumbers);
+                    if (Array.isArray(numbers) && numbers.length > 0) {
+                        console.log("[CheckoutClient] Hard Reload: Liberating selection and redirecting", numbers);
+
+                        // Liberate on backend (best effort, non-blocking background task)
+                        fetch('/api/tickets/release', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
+                        }).catch(err => console.error("[CheckoutClient] Release failed:", err));
+
+                        // Go home immediately
+                        router.replace('/');
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Error processing abandoned selection on mount", e);
+                }
+            }
+
+            // If we reload and have nothing, we still go home
+            router.replace('/');
+            return;
+        }
+
+        // 2. NORMAL NAVIGATION: Rehydrate if state exists
         if (savedNumbers && savedSessionId) {
             try {
                 const numbers = JSON.parse(savedNumbers);
                 if (Array.isArray(numbers) && numbers.length > 0) {
-                    console.log("[CheckoutClient] Hard Reset: Liberating abandoned selection and redirecting", numbers);
-
-                    // Liberate on backend (best effort, non-blocking background task)
-                    fetch('/api/tickets/release', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
-                    }).catch(err => console.error("[CheckoutClient] Release failed:", err));
-
-                    // Go home immediately
+                    setSelectedNumbers(numbers);
+                    setSessionId(savedSessionId);
+                } else {
                     router.replace('/');
-                    return;
                 }
             } catch (e) {
-                console.error("Error processing abandoned selection on mount", e);
+                console.error("Error rehydrating selection", e);
+                router.replace('/');
             }
-        }
-
-        // If we reach here and have no numbers, we should also probably go home
-        // But we wait for the first render to be safe.
-        if (!savedNumbers || (savedNumbers && JSON.parse(savedNumbers).length === 0)) {
+        } else {
+            // No numbers? Go home.
             router.replace('/');
         }
 
