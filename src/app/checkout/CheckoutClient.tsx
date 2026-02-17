@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw, XCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { isHardReload } from '@/lib/navigation';
+import { wasHardReload } from '@/lib/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ECUADOR_PROVINCES, COUNTRIES } from '@/lib/data';
@@ -62,6 +62,7 @@ export default function CheckoutClient() {
     const searchParams = useSearchParams();
     const hasReleasedOnMount = useRef(false);
     const [isHydrated, setIsHydrated] = useState(false);
+    const [hasNoSelection, setHasNoSelection] = useState(false);
 
     // Debug Mode Logic: dev mode OR ?debug=1
     // (Explicitly hide if ?debug=0)
@@ -74,10 +75,13 @@ export default function CheckoutClient() {
 
         const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
         const savedSessionId = sessionStorage.getItem('yvossoeee_sessionId') || localStorage.getItem('yvossoeee_sessionId');
+        console.log("BRIDGE READ:", sessionStorage.getItem(BRIDGE_KEY));
         const bridgeNums = readBridge();
 
+        const isHard = wasHardReload();
+
         // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5) 
-        if (isHardReload()) {
+        if (isHard) {
             const hasStoredSelection = bridgeNums.length > 0 || savedNumbers;
 
             if (hasStoredSelection) {
@@ -162,9 +166,9 @@ export default function CheckoutClient() {
                 });
 
         } else {
-            console.warn("[CheckoutClient] No selection found, returning to home.");
+            console.warn("[CheckoutClient] No selection found.");
             sessionStorage.removeItem(BRIDGE_KEY);
-            router.replace('/');
+            setHasNoSelection(true);
         }
 
         // 2. Page Close/Unload Listener (Best Effort)
@@ -461,7 +465,28 @@ export default function CheckoutClient() {
     // State for manual PayPhone link (Fallback)
     const [manualPayUrl, setManualPayUrl] = useState<string | null>(null);
 
-    // Fallback UI Component
+    if (hasNoSelection) {
+        return (
+            <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">
+                <div className="glass-strong p-8 rounded-2xl max-w-sm w-full text-center">
+                    <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <XCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h2 className="text-xl font-bold text-white mb-2">No se encontraron números</h2>
+                    <p className="text-white/60 mb-8 text-sm">
+                        Tu carrito está vacío o la sesión expiró. Regresa al inicio para seleccionar tus números.
+                    </p>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="w-full py-3 bg-white text-black font-bold rounded-xl hover:shadow-lg transition-all"
+                    >
+                        Volver al Inicio
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (manualPayUrl) {
         return (
             <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">

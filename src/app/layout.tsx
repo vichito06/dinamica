@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 
 import AnalyticsTracker from '@/components/AnalyticsTracker';
+import { HardReloadMarker } from '@/components/HardReloadMarker';
 
 import Footer from '@/components/Footer';
 
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="es" className="dark">
       <body className={inter.className}>
         <div className="min-h-screen flex flex-col">
+          <HardReloadMarker />
           <AnalyticsTracker />
           <main className="flex-1">
             {children}

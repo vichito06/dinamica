@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Dices, Hash, ShoppingCart, Check, Loader2, ArrowRight } from 'lucide-react';
-import { isHardReload } from '@/lib/navigation';
+import { wasHardReload } from '@/lib/navigation';
 
 const MIN_NUMBER = 1;
 const MAX_NUMBER = 9999;
@@ -28,8 +28,8 @@ export default function NumberSelector() {
         const saved = localStorage.getItem('yvossoeee_selectedNumbers');
         const sessionId = localStorage.getItem('yvossoeee_sessionId');
 
-        // 1. HARD RESET: Clear selection ONLY on actual page reload (F5)
-        if (isHardReload()) {
+        // 1. HARD RESET: Clear selection ONLY on actual page reload (F5) flag
+        if (wasHardReload()) {
             const BRIDGE_KEY = "checkout:selectedTickets";
             const hasStored = saved || sessionId || sessionStorage.getItem(BRIDGE_KEY);
 
@@ -188,7 +188,9 @@ export default function NumberSelector() {
             const nums = Array.from(new Set(selectedNumbers)); // dedupe
 
             // Save to sessionStorage bridge for SPA navigation (pure array as requested)
+            console.log("BRIDGE SAVE:", nums);
             sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(nums));
+            console.log("BRIDGE RAW:", sessionStorage.getItem(BRIDGE_KEY));
 
             // Ensure sessionId exists in sessionStorage (stable for the tab session as requested)
             let sessionId = sessionStorage.getItem('yvossoeee_sessionId');
@@ -373,6 +375,7 @@ export default function NumberSelector() {
                                     </div>
                                 </div>
                                 <button
+                                    type="button"
                                     onClick={handleContinue}
                                     className="w-full md:w-auto px-8 py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg hover:shadow-white/30 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2"
                                 >
