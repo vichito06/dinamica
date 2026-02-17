@@ -53,6 +53,7 @@ model Sale {
   preparedAt                DateTime?
   customer                  Customer        @relation(fields: [customerId], references: [id])
   tickets                   Ticket[]
+  requestedNumbers          String[]        @default([])
   ticketNumbers             String[]        @default([])
   lastEmailSentAt           DateTime?
 }

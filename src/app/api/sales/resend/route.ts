@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendTicketsEmail } from '@/lib/email';
-import { recoverTicketNumbers } from '@/lib/ticketNumbersRecovery';
+import { recoverAndFixTicketNumbers } from '@/lib/ticketNumbersRecovery';
 
 export const runtime = 'nodejs';
 
@@ -37,15 +37,17 @@ export async function POST(request: Request) {
             }
         }
 
-        // Use snapshot numbers or recover/repair if missing
+        // ✅ LEY 0 - Recuperación y reparación antes de enviar
         const recovery = await prisma.$transaction(async (tx) => {
-            return await recoverTicketNumbers(tx, sale.id);
+            return await recoverAndFixTicketNumbers(tx, sale.id);
         });
 
-        const tickets = recovery.numbers;
-        if (tickets.length === 0) {
-            return NextResponse.json({ error: 'No se encontraron tickets para esta venta.' }, { status: 404 });
+        if (!recovery.ok) {
+            console.error(`[Resend API] Error recovering tickets for sale ${sale.id}: ${recovery.reason}`);
+            return NextResponse.json({ error: `No se pudieron recuperar los tickets: ${recovery.reason}. Contacte a soporte.` }, { status: 404 });
         }
+
+        const tickets = recovery.ticketNumbers;
 
         const emailResult = await sendTicketsEmail({
             to: sale.customer.email,

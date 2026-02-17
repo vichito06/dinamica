@@ -155,22 +155,22 @@ function ReturnContent() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-                                <p className="text-orange-400 text-sm font-medium mb-3">
-                                    Pago confirmado, pero no pudimos recuperar tus números automáticamente.
+                            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                <p className="text-red-400 text-sm font-medium mb-3">
+                                    No se pudieron recuperar tus números automáticamente. Por favor, contacta a soporte con tu ID de transacción.
                                 </p>
                                 <button
                                     onClick={recoverTickets}
                                     disabled={isRecovering}
-                                    className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-xs font-bold rounded-lg border border-orange-500/30 transition-all flex items-center justify-center gap-2"
+                                    className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/10 transition-all flex items-center justify-center gap-2"
                                 >
                                     {isRecovering ? (
                                         <>
                                             <Loader2 className="w-3 h-3 animate-spin" />
-                                            Recuperando...
+                                            Intentando nuevamente...
                                         </>
                                     ) : (
-                                        "Toca aquí para Recuperar Números"
+                                        "Reintentar Recuperación"
                                     )}
                                 </button>
                             </div>

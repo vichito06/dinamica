@@ -1,56 +1,110 @@
-import { PrismaClient, TicketStatus } from "@prisma/client";
+import { PrismaClient, TicketStatus, SaleStatus } from "@prisma/client";
 
 // Omit problematic properties for transaction type
-type PrismaTransaction = Omit<
+type Tx = Omit<
     PrismaClient,
     "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >;
 
-export async function recoverTicketNumbers(tx: any, saleId: string) {
+export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
+    // 1) Leer venta con toda la evidencia
     const sale = await tx.sale.findUnique({
         where: { id: saleId },
-        select: { ticketNumbers: true },
+        select: { id: true, ticketNumbers: true, requestedNumbers: true, status: true },
     });
 
-    if (!sale) return { numbers: [], source: "none" as const, counts: { snapshot: 0, sold: 0, reserved: 0 } };
-
-    // A) Snapshot - using casting to bypass Prisma drift on Sale model
-    const snapshotNumbers = ((sale as any).ticketNumbers ?? []).map((n: string | number) => String(n).padStart(4, "0"));
-    if (snapshotNumbers.length > 0) {
-        return { numbers: snapshotNumbers, source: "snapshot" as const, counts: { snapshot: snapshotNumbers.length, sold: 0, reserved: 0 } };
+    if (!sale) {
+        return { ok: false as const, reason: "SALE_NOT_FOUND", ticketNumbers: [] as string[] };
     }
 
-    // B) Tickets SOLD/RESERVED - handle potential HELD/RESERVED drift
+    // Handle possible property absence or different types with any casting
+    const ticketNumbers = (sale as any).ticketNumbers || [];
+    const requestedNumbers = (sale as any).requestedNumbers || [];
+
+    const snapshotNorm = (Array.isArray(ticketNumbers) ? ticketNumbers : []).map((n: any) => String(n).padStart(4, "0"));
+    const requestedNorm = (Array.isArray(requestedNumbers) ? requestedNumbers : []).map((n: any) => String(n).padStart(4, "0"));
+
+    // ✅ PRIORIDAD A: Si Sale.ticketNumbers ya existe, listo (ya pagado y guardado)
+    if (snapshotNorm.length > 0) {
+        return { ok: true as const, source: "snapshot" as const, ticketNumbers: snapshotNorm };
+    }
+
+    // ✅ PRIORIDAD B: Si ticketNumbers está vacío pero requestedNumbers tiene datos (LEY 0)
+    if (requestedNorm.length > 0) {
+        const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
+        const targetStatus = sale.status === SaleStatus.PAID ? TicketStatus.SOLD : reservedStatus;
+
+        console.log(`[TicketRecovery] saleId=${saleId} source=requested_numbers requestedCount=${requestedNorm.length} targetStatus=${targetStatus}`);
+
+        // Re-vincular y reparar los tickets basados en la selección original
+        for (const numStr of requestedNorm) {
+            const numInt = parseInt(numStr, 10);
+            await tx.ticket.upsert({
+                where: { number: numInt },
+                update: {
+                    saleId: sale.id,
+                    status: targetStatus,
+                    sessionId: null,
+                    reservedUntil: null
+                },
+                create: {
+                    number: numInt,
+                    saleId: sale.id,
+                    status: targetStatus,
+                    reservedUntil: null
+                }
+            });
+        }
+
+        // Si la venta ya está pagada, actualizar el snapshot final
+        if (sale.status === SaleStatus.PAID) {
+            await tx.sale.update({
+                where: { id: sale.id },
+                data: { ticketNumbers: requestedNorm } as any
+            });
+        }
+
+        return { ok: true as const, source: "requested_repaired" as const, ticketNumbers: requestedNorm };
+    }
+
+    // ✅ PRIORIDAD C: Fallback absoluto (buscar por saleId en la tabla Ticket)
     const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
     const tickets = await tx.ticket.findMany({
-        where: { saleId, status: { in: [TicketStatus.SOLD, reservedStatus] } },
+        where: {
+            saleId,
+            status: { in: [TicketStatus.SOLD, reservedStatus] },
+        },
         select: { number: true, status: true },
         orderBy: { number: "asc" },
     });
 
-    const soldCount = tickets.filter((t: any) => t.status === TicketStatus.SOLD).length;
-    const reservedCount = tickets.filter((t: any) => t.status === reservedStatus).length;
+    const nums = tickets.map((t: { number: number | string }) => String(t.number).padStart(4, "0"));
 
-    if (tickets.length === 0) {
-        return { numbers: [], source: "none" as const, counts: { snapshot: 0, sold: 0, reserved: 0 } };
+    if (nums.length === 0) {
+        // ❌ ghost sale: PAID sin evidencia de ningún tipo
+        return { ok: false as const, reason: "NO_TICKETS_FOR_SALE", ticketNumbers: [] as string[] };
     }
 
-    const numbers = tickets.map((t: any) => String(t.number).padStart(4, "0"));
-
-    // C) Repair RESERVED → SOLD + snapshot
-    if (reservedCount > 0) {
+    // Repair si hay RESERVED en una venta PAID
+    const hasReserved = tickets.some((t: { status: any }) => t.status === reservedStatus);
+    if (sale.status === SaleStatus.PAID && hasReserved) {
         await tx.ticket.updateMany({
             where: { saleId, status: reservedStatus },
             data: { status: TicketStatus.SOLD, sessionId: null, reservedUntil: null },
         });
-
-        await tx.sale.update({
-            where: { id: saleId },
-            data: { ticketNumbers: numbers },
-        });
-
-        return { numbers, source: "repaired" as const, counts: { snapshot: 0, sold: soldCount, reserved: reservedCount } };
     }
 
-    return { numbers, source: "tickets" as const, counts: { snapshot: 0, sold: soldCount, reserved: reservedCount } };
+    // Guardar snapshot definitivo si está pagada
+    if (sale.status === SaleStatus.PAID) {
+        await tx.sale.update({
+            where: { id: sale.id },
+            data: { ticketNumbers: nums } as any
+        });
+    }
+
+    return {
+        ok: true as const,
+        source: hasReserved ? ("repaired" as const) : ("tickets" as const),
+        ticketNumbers: nums,
+    };
 }

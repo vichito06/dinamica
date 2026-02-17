@@ -75,7 +75,8 @@ export async function POST(request: Request) {
                 },
             });
 
-            // Create Sale linked to Customer
+            // Create Sale linked to Customer - [LAW 0] Save requestedNumbers snapshot
+            const requestedNumbers = ticketNumbers.map(n => String(n).padStart(4, '0'));
             const sale = await tx.sale.create({
                 data: {
                     status: SaleStatus.PENDING,
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
                     currency: 'USD',
                     customerId: customer.id,
                     provider: 'PAYPHONE',
+                    requestedNumbers: requestedNumbers, // Evidence for recovery
                 }
             });
 
