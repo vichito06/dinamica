@@ -125,6 +125,20 @@ export default function CheckoutClient() {
             })
                 .then(async (res) => {
                     const data = await res.json();
+                    if (res.status === 409) {
+                        // Handle partial success/conflicts
+                        if (data.unavailable && data.unavailable.length > 0) {
+                            const unavailableList = data.unavailable.join(', ');
+                            const reservedList = data.reserved || [];
+
+                            // Update selection to only what was successfully reserved
+                            const stillSelected = reservedList.map((n: string) => parseInt(n, 10));
+                            setSelectedNumbers(stillSelected);
+                            sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(stillSelected));
+
+                            throw new Error(`Los tickets [${unavailableList}] ya han sido comprados por otra persona. Hemos actualizado tu selección.`);
+                        }
+                    }
                     if (!res.ok) throw new Error(data.error || 'No se pudieron reservar los números.');
                     return data;
                 })
@@ -224,6 +238,24 @@ export default function CheckoutClient() {
             });
 
             const reserveData = await reserveRes.json();
+            if (reserveRes.status === 409) {
+                if (reserveData.unavailable && reserveData.unavailable.length > 0) {
+                    const unavailableList = reserveData.unavailable.join(', ');
+                    const reservedList = reserveData.reserved || [];
+
+                    // Update selection
+                    const stillSelected = reservedList.map((n: string) => parseInt(n, 10));
+                    setSelectedNumbers(stillSelected);
+                    sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(stillSelected));
+
+                    if (stillSelected.length === 0) {
+                        router.push('/');
+                        throw new Error(`Los tickets [${unavailableList}] ya no están disponibles. Regresa al inicio.`);
+                    }
+
+                    throw new Error(`Los tickets [${unavailableList}] ya no están disponibles. Hemos actualizado tu carrito.`);
+                }
+            }
             if (!reserveRes.ok) {
                 throw new Error(reserveData.error || 'Algunos tickets ya no están disponibles.');
             }

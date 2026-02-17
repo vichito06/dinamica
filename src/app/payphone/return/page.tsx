@@ -44,8 +44,11 @@ function ReturnContent() {
                     setTicketNumbers(data.ticketNumbers || []);
                     setEmailSent(data.emailSent || false);
 
-                    // Clear checkout session
-                    sessionStorage.removeItem('selectedNumbers');
+                    // Clear checkout session (Unified Keys)
+                    sessionStorage.removeItem('checkout:selectedTickets');
+                    sessionStorage.removeItem('yvossoeee_sessionId');
+                    // Legacy cleanup
+                    localStorage.removeItem('selectedNumbers');
                     localStorage.removeItem('yvossoeee_selectedNumbers');
                     localStorage.removeItem('yvossoeee_sessionId');
                 } else if (data.statusCode === 2) {

@@ -50,41 +50,75 @@ export async function POST(request: Request) {
 
         // 2. Transaction with increased timeout (30s)
         const result = await prisma.$transaction(async (tx) => {
-            // Check availability - include the status and sessionId to distinguish
+            const now = new Date();
+
+            // A. Release expired RESERVED tickets first to maximize inventory
+            await tx.ticket.updateMany({
+                where: {
+                    status: TicketStatus.RESERVED,
+                    reservedUntil: { lt: now }
+                },
+                data: {
+                    status: TicketStatus.AVAILABLE,
+                    reservedUntil: null,
+                    sessionId: null,
+                    saleId: null
+                }
+            });
+
+            // B. Check availability for requested tickets
             const existing = await tx.ticket.findMany({
                 where: { number: { in: ticketNumbers } }
             });
 
             const conflicts = existing.filter(t => {
-                const isSold = t.status === TicketStatus.SOLD;
-                // If it's held by another session OR it's been long enough that it should have expired
-                const isHeldByOthers = t.status === TicketStatus.RESERVED &&
-                    t.sessionId !== sessionId &&
-                    t.reservedUntil && t.reservedUntil > now;
-                return isSold || isHeldByOthers;
-            });
+                const isSold = t.status === TicketStatus.SOLD || t.saleId !== null;
+                // If it's reserved by another session (and not expired as we just cleaned them)
+                const isReservedByOthers = t.status === TicketStatus.RESERVED &&
+                    t.sessionId !== sessionId;
+                // Any status other than AVAILABLE or RESERVED by ME is a conflict
+                const isNotAvailableOrMine = t.status !== TicketStatus.AVAILABLE &&
+                    !(t.status === TicketStatus.RESERVED && t.sessionId === sessionId);
 
-            if (conflicts.length > 0) {
-                return {
-                    success: false,
-                    code: 'CONFLICT',
-                    conflicts: conflicts.map(t => t.number.toString().padStart(4, '0'))
-                };
-            }
+                return isSold || isReservedByOthers || isNotAvailableOrMine;
+            });
 
             const expiresAt = new Date(now.getTime() + 10 * 60 * 1000); // 10 min
             const existingNumbers = existing.map(t => t.number);
             const missingNumbers = ticketNumbers.filter(num => !existingNumbers.includes(num));
 
-            // Identify which were already reserved by THIS session (idempotency)
-            const alreadyReserved = existing
-                .filter(t => t.status === TicketStatus.RESERVED && t.sessionId === sessionId)
-                .map(t => t.number.toString().padStart(4, '0'));
+            if (conflicts.length > 0) {
+                // If conflicts exist, we still want to reserve what WE CAN
+                // But we return the conflicts to the UI for replacement
+                const conflictNumbers = conflicts.map(t => t.number.toString().padStart(4, '0'));
+                const availableToReserve = ticketNumbers.filter(n => !conflictNumbers.includes(n.toString().padStart(4, '0')));
 
-            // Bulk Update for ones that are AVAILABLE or already held by ME
-            let updatedCount = 0;
+                // Reserve the available ones
+                if (availableToReserve.length > 0) {
+                    await tx.ticket.updateMany({
+                        where: {
+                            number: { in: availableToReserve },
+                            status: TicketStatus.AVAILABLE
+                        },
+                        data: {
+                            status: TicketStatus.RESERVED,
+                            sessionId: sessionId,
+                            reservedUntil: expiresAt
+                        }
+                    });
+                }
+
+                return {
+                    success: false,
+                    code: 'PARTIAL_SUCCESS_WITH_CONFLICTS',
+                    reserved: availableToReserve.map(n => n.toString().padStart(4, '0')),
+                    unavailable: conflictNumbers
+                };
+            }
+
+            // C. Bulk Update for ones that are AVAILABLE or already held by ME
             if (existingNumbers.length > 0) {
-                const res = await tx.ticket.updateMany({
+                await tx.ticket.updateMany({
                     where: {
                         number: { in: existingNumbers },
                         OR: [
@@ -98,13 +132,11 @@ export async function POST(request: Request) {
                         reservedUntil: expiresAt
                     }
                 });
-                updatedCount = res.count;
             }
 
-            // Bulk Create for missing ones (optional safeguard, seeding is primary)
-            let createdCount = 0;
+            // D. Bulk Create for missing ones (optional safeguard)
             if (missingNumbers.length > 0) {
-                const res = await tx.ticket.createMany({
+                await tx.ticket.createMany({
                     data: missingNumbers.map(num => ({
                         number: num,
                         status: TicketStatus.RESERVED,
@@ -113,7 +145,6 @@ export async function POST(request: Request) {
                     })),
                     skipDuplicates: true
                 });
-                createdCount = res.count;
             }
 
             const allReserved = ticketNumbers.map(n => n.toString().padStart(4, '0'));
@@ -121,18 +152,19 @@ export async function POST(request: Request) {
             return {
                 success: true,
                 reserved: allReserved,
-                skipped: alreadyReserved
+                unavailable: []
             };
         }, {
             timeout: 30000
         });
 
-        if (!result.success) {
+        if (!result.success && result.code === 'PARTIAL_SUCCESS_WITH_CONFLICTS') {
             return NextResponse.json({
                 ok: false,
                 code: result.code,
                 error: 'Algunos números ya no están disponibles.',
-                conflicts: result.conflicts,
+                reserved: result.reserved,
+                unavailable: result.unavailable,
                 requestId
             }, { status: 409 });
         }
@@ -142,7 +174,7 @@ export async function POST(request: Request) {
         return NextResponse.json({
             ok: true,
             reserved: result.reserved,
-            skipped: result.skipped,
+            unavailable: [],
             requestId
         });
 

@@ -48,3 +48,9 @@ _backup_untracked/
 .env
 
 generate_favicons.py
+*.sql
+scripts/
+
+# temp sql + local scripts
+*.sqlscripts/
+

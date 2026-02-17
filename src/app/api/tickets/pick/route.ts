@@ -19,12 +19,29 @@ export async function POST(req: Request) {
 
         // Atomic pick using raw SQL for SKIP LOCKED performance/safety
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Find available tickets and lock them
+            const now = new Date();
+
+            // 1. Release expired RESERVED tickets first to maximize inventory
+            await tx.ticket.updateMany({
+                where: {
+                    status: TicketStatus.RESERVED,
+                    reservedUntil: { lt: now }
+                },
+                data: {
+                    status: TicketStatus.AVAILABLE,
+                    reservedUntil: null,
+                    sessionId: null,
+                    saleId: null
+                }
+            });
+
+            // 2. Find available tickets and lock them
             // We use ORDER BY RANDOM() to give that "generar" feel
             const available: any[] = await tx.$queryRaw`
                 SELECT id, "number"
                 FROM "Ticket"
                 WHERE "status" = 'AVAILABLE'
+                  AND "saleId" IS NULL
                 ORDER BY RANDOM()
                 LIMIT ${count}
                 FOR UPDATE SKIP LOCKED
@@ -36,9 +53,9 @@ export async function POST(req: Request) {
 
             const ids = available.map(t => t.id);
             const ticketNumbers = available.map(t => t.number.toString().padStart(4, '0'));
-            const reservedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+            const reservedUntil = new Date(now.getTime() + 10 * 60 * 1000); // 10 minutes
 
-            // 2. Mark as RESERVED
+            // 3. Mark as RESERVED
             await tx.ticket.updateMany({
                 where: { id: { in: ids } },
                 data: {

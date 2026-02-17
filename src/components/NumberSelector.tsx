@@ -124,7 +124,9 @@ export default function NumberSelector() {
 
     const generateMultipleNumbers = async () => {
         setIsGenerating(true);
-        const sessionId = sessionStorage.getItem('yvossoeee_sessionId');
+        const SESSION_ID_KEY = "yvossoeee_sessionId";
+        const BRIDGE_KEY = "checkout:selectedTickets";
+        const sessionId = sessionStorage.getItem(SESSION_ID_KEY);
 
         try {
             const res = await fetch('/api/tickets/pick', {
@@ -137,10 +139,16 @@ export default function NumberSelector() {
             if (!res.ok) throw new Error(data.error || 'Error al generar números.');
 
             const pickedNumbers = data.ticketNumbers.map((n: string) => parseInt(n, 10));
-            const newSelection = [...selectedNumbers, ...pickedNumbers];
+
+            // BUG FIX: Replace selection instead of concatenating
+            const newSelection = [...pickedNumbers];
+
+            if (pickedNumbers.length < selectedQuantity) {
+                alert(`Solo quedan ${pickedNumbers.length} tickets disponibles. Se han seleccionado todos los sobrantes.`);
+            }
 
             setSelectedNumbers(newSelection);
-            sessionStorage.setItem('checkout:selectedTickets', JSON.stringify(newSelection));
+            sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(newSelection));
 
         } catch (error: any) {
             console.error("[NumberSelector] Pick failed:", error);

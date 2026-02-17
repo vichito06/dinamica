@@ -42,7 +42,7 @@ export async function POST(request: Request) {
             const now = new Date();
             const unavailable = existingTickets.filter(t =>
                 t.status === TicketStatus.SOLD ||
-                (t.status === TicketStatus.HELD &&
+                (t.status === TicketStatus.RESERVED &&
                     t.reservedUntil && t.reservedUntil > now &&
                     t.sessionId !== sessionId)
             );
@@ -96,10 +96,20 @@ export async function POST(request: Request) {
                     data: {
                         status: TicketStatus.RESERVED,
                         saleId: sale.id,
-                        sessionId: sessionId,
-                        reservedUntil: expiresAt,
+                        reservedUntil: expiresAt
                     }
                 });
+
+                // Double check that we actually updated the expected amount of tickets
+                // This prevents race conditions where tickets might have changed status 
+                // between our check and the update
+                const updatedCount = await tx.ticket.count({
+                    where: { saleId: sale.id }
+                });
+
+                if (updatedCount < ticketNumbers.length) {
+                    throw new Error(`CONCURRENCY_ERROR: Solo se pudieron reservar ${updatedCount} de ${ticketNumbers.length} tickets.`);
+                }
             }
 
             if (missingNumbers.length > 0) {
