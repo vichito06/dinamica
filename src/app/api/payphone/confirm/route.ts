@@ -131,6 +131,7 @@ export async function POST(req: Request) {
                 return NextResponse.json({
                     ok: true,
                     alreadyPaid: false,
+                    statusCode: 3,
                     saleId: sale.id,
                     ticketNumbers: ticketNumbers,
                 });

@@ -78,8 +78,9 @@ function ReturnContent() {
                 });
 
                 const data = await response.json();
+                const isSuccess = response.ok && (data.statusCode === 3 || data.ok === true);
 
-                if (response.ok && data.statusCode === 3) {
+                if (isSuccess) {
                     sessionStorage.setItem(key, "1"); // Mark as done
                     setStatus('success');
                     setSaleId(data.saleId);
