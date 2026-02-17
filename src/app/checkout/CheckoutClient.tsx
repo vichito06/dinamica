@@ -195,53 +195,6 @@ export default function CheckoutClient() {
 
     const totalPrice = selectedNumbers.length;
 
-    const handlePersonalDataSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (isReserving) return;
-
-        // Validation: minimum 2 words for fullName
-        const nameParts = personalData.fullName.trim().split(/\s+/);
-        if (nameParts.length < 2) {
-            alert('Por favor ingressa tu nombre completo (Nombre y Apellido).');
-            return;
-        }
-
-        setIsReserving(true);
-        try {
-            // Reserve tickets before proceeding to payment
-            const response = await fetch('/api/tickets/reserve', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ticketNumbers: selectedNumbers.map((t: number) => t.toString().padStart(4, '0')),
-                    sessionId
-                })
-            });
-
-            const result = await response.json();
-            console.log('[Checkout] Reserve status:', response.status, 'code:', result.code);
-
-            if (!response.ok) {
-                const errorMsg = result.error || 'Error: Algunos tickets ya no están disponibles. Por favor selecciona otros.';
-                console.error('[Checkout] Reservation failed:', result);
-                alert(errorMsg);
-                if (result.code === 'TICKET_ALREADY_RESERVED' || result.unavailable) {
-                    router.push('/');
-                }
-                return;
-            }
-
-            console.log('[Checkout] Reservation successful');
-            setCurrentStep('payment');
-
-        } catch (error: any) {
-            console.error('Reservation error:', error);
-            alert(error.message || 'Error de conexión. Inténtalo de nuevo.');
-        } finally {
-            setIsReserving(false);
-        }
-    };
-
     const splitFullName = (name: string) => {
         const parts = name.trim().toUpperCase().split(/\s+/).filter(Boolean);
         if (parts.length === 0) return { first: "", last: "" };
@@ -274,21 +227,46 @@ export default function CheckoutClient() {
         return { first, last };
     };
 
-    const handlePaymentSubmit = async (e?: React.FormEvent) => {
-        if (e) e.preventDefault();
+    const handlePersonalDataSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
 
-        // 1) Evita doble POST con ref síncrona
-        if (payingRef.current) return;
-        payingRef.current = true;
-        setIsPaying(true);
+        // Evita doble click / procesando
+        if (isPaying || isReserving) return;
 
-        setDebugInfo({ step: 'CREATE_SALE' });
+        // Validation: minimum 2 words for fullName
+        const nameParts = personalData.fullName.trim().split(/\s+/);
+        if (nameParts.length < 2) {
+            alert('Por favor ingressa tu nombre completo (Nombre y Apellido).');
+            return;
+        }
+
+        setIsReserving(true);
+        setDebugInfo({ step: 'IDLE' });
 
         try {
-            const { first, last } = splitFullName(personalData.fullName);
+            // 1. RE-RESERVE (Ensures they are still available and locked)
+            const reserveRes = await fetch('/api/tickets/reserve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticketNumbers: selectedNumbers.map((t: number) => t.toString().padStart(4, '0')),
+                    sessionId
+                })
+            });
 
-            // 1. Create Sale PENDING / Reserve Tickets logic
-            const response = await fetch('/api/sales', {
+            const reserveData = await reserveRes.json();
+            if (!reserveRes.ok) {
+                throw new Error(reserveData.error || 'Algunos tickets ya no están disponibles.');
+            }
+
+            console.log('[Checkout] Reservation confirmed. Creating sale...');
+            setIsReserving(false);
+            setIsPaying(true);
+            setDebugInfo({ step: 'CREATE_SALE' });
+
+            // 2. CREATE SALE
+            const { first, last } = splitFullName(personalData.fullName);
+            const saleRes = await fetch('/api/sales', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -299,140 +277,64 @@ export default function CheckoutClient() {
                         phone: personalData.phone,
                         idNumber: personalData.idNumber,
                         country: personalData.country,
-                        city: personalData.city,
-                        name: personalData.fullName.toUpperCase().trim()
+                        city: personalData.city
                     },
-                    tickets: selectedNumbers,
+                    ticketNumbers: selectedNumbers.map((t: number) => t.toString().padStart(4, '0')),
                     total: totalPrice,
                     sessionId
                 })
             });
 
-            let result;
-            const saleBodyText = await response.text();
-            try {
-                result = JSON.parse(saleBodyText);
-            } catch (err) {
-                console.error("[Checkout] Non-JSON response from /api/sales:", saleBodyText.slice(0, 500));
-                throw new Error("Respuesta inválida del servidor al crear la venta.");
+            const saleData = await saleRes.json();
+            if (!saleRes.ok) {
+                throw new Error(saleData.error || 'Error al crear la orden.');
             }
 
-            if (!response.ok) {
-                if (response.status === 409 || result.error) {
-                    alert(result.error || 'Error: Algunos números ya no están disponibles.');
-                    router.push('/');
-                    return;
-                }
-                throw new Error(result.error || `Error al crear la venta (Status: ${response.status})`);
-            }
-
-            // Robust saleId mapping
-            const saleId = result.id || result.saleId;
+            const saleId = saleData.id || saleData.saleId || saleData.sale?.id;
             if (!saleId) throw new Error("No se pudo obtener el ID de la venta.");
 
             setDebugInfo(prev => ({ ...prev, step: 'PREPARE', saleId }));
 
-            // 2. Call /api/payphone/prepare with saleId (cache: no-store added as requested)
-            const prepareResponse = await fetch('/api/payphone/prepare', {
+            // 3. PREPARE PAYPHONE
+            const prepareRes = await fetch('/api/payphone/prepare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 cache: 'no-store',
                 body: JSON.stringify({ saleId })
             });
 
-            const contentType = prepareResponse.headers.get("content-type") || "";
-            const bodyText = await prepareResponse.text();
-
-            let json: any = null;
-            let parseError = null;
-
-            if (contentType.includes("application/json")) {
-                try {
-                    json = JSON.parse(bodyText);
-                    // 2) Guarda para debug (por si te redirige y devtools no muestra Response)
-                    localStorage.setItem("last_payphone_prepare", JSON.stringify(json));
-                    console.log("PAYPHONE_PREPARE", json);
-                } catch (e) {
-                    parseError = e;
-                }
+            const prepareData = await prepareRes.json();
+            if (!prepareRes.ok || !prepareData.ok) {
+                console.error("[Checkout] PayPhone Prepare failed:", prepareData);
+                throw new Error(prepareData.message || 'Error al preparar el pago.');
             }
 
-            // Secure Production Log
-            console.log(`[Checkout] [DEBUG] Prepare Status: ${prepareResponse.status}, OK: ${prepareResponse.ok}, Type: ${contentType}`);
+            // 4. REDIRECT DIRECTLY TO PAYPHONE
+            const data = prepareData.data || prepareData;
+            const paymentUrl = data?.payWithCard || data?.payWithPayPhone;
 
-            setDebugInfo(prev => ({
-                ...prev,
-                prepareStatus: prepareResponse.status,
-                contentType,
-                requestId: json?.requestId,
-                dataKeys: json?.data ? Object.keys(json.data) : []
-            }));
-
-            if (json) {
-                console.log(`[Checkout] [DEBUG] JSON Keys:`, {
-                    ok: json.ok,
-                    code: json.code,
-                    requestId: json.requestId,
-                    dataKeys: json.data ? Object.keys(json.data) : [],
-                    hasPayWithPayPhone: !!json.data?.payWithPayPhone,
-                    hasPayWithCard: !!json.data?.payWithCard
-                });
-            } else {
-                console.error(`[Checkout] [DEBUG] Non-JSON or Parse Error. Snippet:`, bodyText.slice(0, 500));
+            if (!paymentUrl) {
+                throw new Error('No se pudo generar el link de pago.');
             }
 
-            // 3) DIRECTO A TARJETA (Priority: payWithCard)
-            // Extraemos de json?.data o de la raíz del JSON según lo que devuelva el API
-            const data = json?.data || json;
-            const url = data?.payWithCard ||
-                data?.payWithPayPhone ||
-                data?.payWithCardUrl ||
-                data?.payWithPayPhoneUrl ||
-                data?.url ||
-                data?.paymentLink;
-
-            // Handle errors or missing link
-            console.log('[Checkout] Prepare status:', prepareResponse.status, 'hasUrl:', !!url, 'requestId:', json?.requestId);
-
-            if (!prepareResponse.ok || !json?.ok || !url) {
-                const status = prepareResponse.status;
-                const code = json?.code || "NO_CODE";
-                const reqId = json?.requestId || "NO_ID";
-                const keys = json?.data ? Object.keys(json.data).join(',') : "no-data";
-
-                let errorMsg = `No se pudo obtener el link de pago.\n\nDetalles:\nStatus: ${status}\nCode: ${code}\nReqID: ${reqId}\nAvailable Data Keys: ${keys}`;
-
-                if (json?.code === "PAYPHONE_CIRCUIT_OPEN") {
-                    errorMsg = "Proveedor en pausa (Circuit Breaker), intenta en 60s.";
-                } else if (!json && !prepareResponse.ok) {
-                    errorMsg = `Error de red o servidor (${status}). Por favor revisa tu conexión.`;
-                } else if (json?.ok && !url) {
-                    errorMsg = `PayPhone respondió OK pero no envió URL.\nStatus: ${status}\nReqID: ${reqId}\nKeys: ${keys}`;
-                }
-
-                throw new Error(errorMsg);
-            }
-
+            console.log("[Checkout] Redirecting to PayPhone:", paymentUrl);
             setDebugInfo(prev => ({ ...prev, step: 'REDIRECT', urlDetected: true }));
 
-            // 4. Standard Redirection - Use assign to prevent browser blocking
-            try {
-                window.location.assign(url);
-            } catch (err) {
-                console.error("[Checkout] Redirection blocked or failed:", err);
-                setIsPaying(false);
-                setManualPayUrl(url); // Show fallback button
+            // Give 500ms for user to see the debug info if in debug mode
+            if (isDebugMode) {
+                await new Promise(r => setTimeout(r, 800));
             }
 
+            window.location.href = paymentUrl;
+
         } catch (error: any) {
-            console.error('Checkout error:', error);
+            console.error('[Checkout] Submission error:', error);
+            alert(error.message || 'Error al procesar la solicitud.');
             setDebugInfo(prev => ({ ...prev, step: 'ERROR', error: error.message }));
-            alert(error.message || 'No se pudo iniciar el pago. Intenta nuevamente.');
-            setIsPaying(false); // ✅ Permitir reintento si falla
         } finally {
-            // si falla o termina, libera el candado
-            payingRef.current = false;
+            setIsReserving(false);
             setIsPaying(false);
+            payingRef.current = false;
         }
     };
 
@@ -440,23 +342,11 @@ export default function CheckoutClient() {
         const confirmMsg = `¿Estás seguro de que quieres eliminar el ticket ${ticket.toString().padStart(4, '0')}?`;
         if (!window.confirm(confirmMsg)) return;
 
-        if (currentStep === 'payment') {
-            try {
-                // Liberate ticket on backend if already reserved (Payment step)
-                await fetch('/api/tickets/release', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ticketNumber: ticket, sessionId })
-                });
-            } catch (e) {
-                console.error("Error releasing ticket", e);
-            }
-        }
-
         const newNumbers = selectedNumbers.filter(n => n !== ticket);
         setSelectedNumbers(newNumbers);
         localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newNumbers));
 
+        // Note: Release on backend happens strictly on beforeunload or mount if stale.
         if (newNumbers.length === 0) {
             router.push('/');
         }
@@ -588,23 +478,16 @@ export default function CheckoutClient() {
 
                 {/* Progress Steps */}
                 <div className="mb-12">
-                    <div className="stepper" style={{ maxWidth: '1100px', margin: '18px auto 0', padding: '0 24px', display: 'flex', alignItems: 'center', gap: '140px' }}>
+                    <div className="stepper" style={{ maxWidth: '800px', margin: '18px auto 0', padding: '0 24px', display: 'flex', alignItems: 'center', gap: '80px', justifyContent: 'center' }}>
                         <StepIndicator
                             number={1}
-                            title="Datos Personales"
+                            title="Tus Datos"
                             active={currentStep === 'personal'}
-                            completed={currentStep === 'payment' || currentStep === 'confirmation'}
-                        />
-                        <div className={`step-line ${currentStep !== 'personal' ? 'bg-white' : 'bg-white/10'}`} />
-                        <StepIndicator
-                            number={2}
-                            title="Pago"
-                            active={currentStep === 'payment'}
                             completed={currentStep === 'confirmation'}
                         />
-                        <div className={`step-line ${currentStep === 'confirmation' ? 'bg-white' : 'bg-white/10'}`} style={{ flexGrow: 4 }} />
+                        <div className={`step-line ${currentStep === 'confirmation' ? 'bg-white' : 'bg-white/10'}`} style={{ maxWidth: '200px' }} />
                         <StepIndicator
-                            number={3}
+                            number={2}
                             title="Confirmación"
                             active={currentStep === 'confirmation'}
                             completed={false}
@@ -668,18 +551,8 @@ export default function CheckoutClient() {
                                     data={personalData}
                                     setData={setPersonalData}
                                     onSubmit={handlePersonalDataSubmit}
-                                    loading={isReserving}
+                                    loading={isReserving || isPaying}
                                     selectedNumbers={selectedNumbers}
-                                />
-                            )}
-
-                            {currentStep === 'payment' && (
-                                <PaymentForm
-                                    data={paymentData}
-                                    setData={setPaymentData}
-                                    onSubmit={handlePaymentSubmit}
-                                    onBack={() => setCurrentStep('personal')}
-                                    loading={isPaying}
                                 />
                             )}
 
