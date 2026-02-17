@@ -10,12 +10,10 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        // Tolerance for both 'id' and 'saleId'
-        const { id, saleId: providedSaleId, clientTransactionId } = body;
-        const effectiveSaleId = providedSaleId || id;
+        const { id, clientTransactionId } = body;
 
-        if (!effectiveSaleId || !clientTransactionId) {
-            return NextResponse.json({ error: 'Missing effectiveSaleId or clientTransactionId' }, { status: 400 });
+        if (!id || !clientTransactionId) {
+            return NextResponse.json({ error: 'Missing id or clientTransactionId' }, { status: 400 });
         }
 
         const sale = await prisma.sale.findUnique({

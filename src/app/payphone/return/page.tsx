@@ -75,8 +75,22 @@ function ReturnContent() {
                     if (data.ticketNumbers && Array.isArray(data.ticketNumbers) && data.ticketNumbers.length > 0) {
                         setTicketNumbers(data.ticketNumbers);
                     } else {
-                        // Keep it empty to trigger the "No se pudieron mostrar tus números automáticamente" block
-                        setTicketNumbers([]);
+                        // AUTOMATIC FAILSAFE: Call recovery if confirm returned empty
+                        console.log("[return/page] Confirm returned empty tickets, triggering automatic recovery...");
+                        // We can't call recoverTickets() directly here because saleId state update isn't flushed yet
+                        // but we have data.saleId directly.
+                        const recoveryResponse = await fetch('/api/sales/tickets', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ saleId: data.saleId }),
+                            cache: 'no-store'
+                        });
+                        const recoveryData = await recoveryResponse.json();
+                        if (recoveryResponse.ok && recoveryData.ticketNumbers && recoveryData.ticketNumbers.length > 0) {
+                            setTicketNumbers(recoveryData.ticketNumbers);
+                        } else {
+                            setTicketNumbers([]);
+                        }
                     }
 
                     setEmailSent(data.emailSent || false);

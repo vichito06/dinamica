@@ -24,7 +24,8 @@ export async function POST(req: Request) {
         const pad4 = (num: number | string) => String(num).padStart(4, '0');
 
         // Logic sync with /confirm: Snapshot -> SOLD Tickets
-        let tickets: string[] = (sale as any).ticketNumbers || [];
+        const snapshot: string[] = (sale as any).ticketNumbers || [];
+        let tickets: string[] = [...snapshot];
 
         if (tickets.length === 0) {
             const soldTickets = await prisma.ticket.findMany({
@@ -32,9 +33,12 @@ export async function POST(req: Request) {
                 orderBy: { number: 'asc' }
             });
             tickets = soldTickets.map(t => pad4(t.number));
+
+            console.log(`[sales/tickets] saleId=${sale.id} snapshotCount=${snapshot.length} soldCount=${soldTickets.length} (RECOVERED)`);
         } else {
             // Ensure format and order even for snapshots
             tickets = tickets.map(n => pad4(n)).sort();
+            console.log(`[sales/tickets] saleId=${sale.id} snapshotCount=${snapshot.length} soldCount=0 (FROM_SNAPSHOT)`);
         }
 
         return NextResponse.json({
