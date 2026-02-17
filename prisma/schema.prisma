@@ -22,16 +22,43 @@ model Analytics {
   updatedAt DateTime @updatedAt
 }
 
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  type      String   // pageview, unique, etc
+  path      String?
+  sessionId String?
+  createdAt DateTime @default(now())
+  raffleId  String?
+  raffle    Raffle?  @relation(fields: [raffleId], references: [id])
+
+  @@index([type, createdAt, raffleId])
+}
+
+model Raffle {
+  id        String       @id @default(cuid())
+  name      String
+  status    RaffleStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  sales     Sale[]
+  tickets   Ticket[]
+  events    AnalyticsEvent[]
+}
+
 model Ticket {
   id            String       @id @default(cuid())
-  number        Int          @unique
+  number        Int
   status        TicketStatus @default(AVAILABLE)
   reservedUntil DateTime?
   saleId        String?
   sessionId     String?
   sale          Sale?        @relation(fields: [saleId], references: [id])
+  raffleId      String
+  raffle        Raffle       @relation(fields: [raffleId], references: [id])
+  soldAt        DateTime?
 
-  @@index([status, reservedUntil])
+  @@unique([raffleId, number])
+  @@index([status, reservedUntil, raffleId])
   @@index([sessionId])
 }
 
@@ -56,6 +83,10 @@ model Sale {
   requestedNumbers          String[]        @default([])
   ticketNumbers             String[]        @default([])
   lastEmailSentAt           DateTime?
+  raffleId                  String?
+  raffle                    Raffle?         @relation(fields: [raffleId], references: [id])
+
+  @@index([status, confirmedAt, raffleId])
 }
 
 model Customer {
@@ -65,9 +96,16 @@ model Customer {
   lastName  String
   email     String
   phone     String
+  province  String?
+  city      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sales     Sale[]
+}
+
+enum RaffleStatus {
+  ACTIVE
+  CLOSED
 }
 
 enum SaleStatus {

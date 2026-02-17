@@ -24,13 +24,17 @@ import {
     Search,
     Globe,
     Trophy,
-    Sparkles
+    Sparkles,
+    ArrowLeft,
+    Loader2,
+    Calendar,
+    ArrowRight
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
-    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'customers' | 'settings' | 'draw'>('dashboard');
+    const [activeTab, setActiveTab] = useState<'dashboard' | 'sales' | 'customers' | 'settings' | 'draw' | 'tickets'>('dashboard');
     const router = useRouter();
 
     const handleLogout = async () => {
@@ -98,6 +102,12 @@ export default function AdminDashboard() {
                         label="Configuración"
                     />
                     <TabButton
+                        active={activeTab === 'tickets'}
+                        onClick={() => setActiveTab('tickets')}
+                        icon={<Hash className="w-5 h-5 text-blue-400" />}
+                        label="Tickets"
+                    />
+                    <TabButton
                         active={activeTab === 'draw'}
                         onClick={() => setActiveTab('draw')}
                         icon={<Trophy className="w-5 h-5 text-yellow-400" />}
@@ -110,6 +120,7 @@ export default function AdminDashboard() {
                     {activeTab === 'dashboard' && <DashboardView />}
                     {activeTab === 'sales' && <SalesView />}
                     {activeTab === 'customers' && <CustomersView />}
+                    {activeTab === 'tickets' && <TicketsView />}
                     {activeTab === 'settings' && <SettingsView />}
                     {activeTab === 'draw' && <DrawView />}
                 </div>
@@ -136,62 +147,92 @@ function TabButton({ active, onClick, icon, label }: any) {
 import { StatCard } from '../../../components/admin/StatCard';
 
 function DashboardView() {
-    const [stats, setStats] = useState({
-        visitsToday: 0,
-        totalAmount: 0,
-        ticketsSold: 0,
-        buyers: 0,
-        totalTickets: 9999,
-        ticketsAvailable: 9999
+    const [dateRange, setDateRange] = useState({
+        from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        to: new Date().toISOString().split('T')[0]
     });
-    const [sales, setSales] = useState<any[]>([]);
+
+    const [summary, setSummary] = useState<any>(null);
+    const [recentSales, setRecentSales] = useState<any[]>([]);
+    const [recentTickets, setRecentTickets] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch real-time stats
-        fetch('/api/admin/stats')
-            .then(res => res.json())
-            .then(data => data.success !== false && setStats(data))
-            .catch(err => console.error('Stats error:', err));
+        setLoading(true);
+        const fetchDashboard = async () => {
+            try {
+                const res = await fetch(`/api/admin/dashboard?from=${dateRange.from}&to=${dateRange.to}`);
+                const data = await res.json();
+                if (data.ok) setSummary(data);
+            } catch (err) {
+                console.error('Dashboard fetch error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        // Fetch recent sales for the table
-        fetch('/api/sales')
-            .then(res => res.json())
-            .then(data => setSales(Array.isArray(data) ? data : []))
-            .catch(err => console.error('Sales error:', err))
-            .finally(() => setLoading(false));
-    }, []);
+        fetchDashboard();
+    }, [dateRange]);
 
-    // Últimos tickets vendidos (aplanar de las ventas recientes)
-    const recentTickets = sales.flatMap(s => s.tickets || []).slice(0, 20);
+    const metrics = summary?.metrics || {
+        visitsCount: 0,
+        totalSoldAmount: 0,
+        totalSalesCount: 0,
+        ticketsSoldCount: 0,
+        buyersCount: 0,
+        ticketsTotal: 9999,
+        ticketsAvailableCount: 9999
+    };
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Stats Cards Grid - Responsive: 1 col mobile, 2 col tablet, 4 col desktop */}
+            {/* Range Selector */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+                <div className="flex items-center gap-2 text-white/70">
+                    <Calendar className="w-5 h-5" />
+                    <span className="text-sm font-medium">Rango de Análisis</span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <input
+                        type="date"
+                        value={dateRange.from}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+                        className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs focus:border-white/30 outline-none"
+                    />
+                    <span className="text-white/20">/</span>
+                    <input
+                        type="date"
+                        value={dateRange.to}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+                        className="bg-black/20 border border-white/10 rounded-lg px-3 py-1.5 text-white text-xs focus:border-white/30 outline-none"
+                    />
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <StatCard
-                    title="Visitas Hoy"
-                    value={stats.visitsToday.toLocaleString()}
-                    sub="Tráfico del día"
-                    icon={<Eye className="w-5 h-5" />}
+                    title="Visitas (Rango)"
+                    value={metrics.visitsCount?.toLocaleString()}
+                    sub="Eventos LANDING_VISIT"
+                    icon={<Eye className="w-5 h-5 text-blue-400" />}
                 />
                 <StatCard
-                    title="Total Vendido"
-                    value={`$${stats.totalAmount.toLocaleString()}`}
-                    sub="Pagos confirmados"
+                    title="Monto Vendido"
+                    value={`$${metrics.totalSoldAmount?.toLocaleString()}`}
+                    sub={`${metrics.totalSalesCount} transacciones`}
                     icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
                 />
                 <StatCard
                     title="Tickets Vendidos"
-                    value={stats.ticketsSold.toLocaleString()}
-                    sub={`${stats.ticketsSold} de ${stats.totalTickets}`}
-                    icon={<TrendingUp className="w-5 h-5 text-blue-400" />}
+                    value={metrics.ticketsSoldCount?.toLocaleString()}
+                    sub={`Meta: ${metrics.ticketsTotal}`}
+                    icon={<Hash className="w-5 h-5 text-purple-400" />}
                 />
                 <StatCard
-                    title="Tickets Disponibles"
-                    value={stats.ticketsAvailable.toLocaleString()}
-                    sub={`${stats.ticketsAvailable} de ${stats.totalTickets}`}
-                    icon={<Hash className="w-5 h-5 text-purple-400" />}
+                    title="Compradores Unicos"
+                    value={metrics.buyersCount?.toLocaleString()}
+                    sub="Clientes con pago verificado"
+                    icon={<Users className="w-5 h-5 text-orange-400" />}
                 />
             </div>
 
@@ -201,64 +242,114 @@ function DashboardView() {
                 <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-xl">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                            <DollarSign className="w-5 h-5 text-emerald-500" />
-                            Ventas Recientes
+                            <TrendingUp className="w-5 h-5 text-emerald-500" />
+                            Últimas Ventas Pagadas
                         </h3>
-                        <button className="text-sm text-white/50 hover:text-white transition-colors">Ver todas</button>
                     </div>
 
                     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        {sales.slice(0, 8).map((sale, i) => (
+                        {recentSales.map((sale: any, i: number) => (
                             <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-all group">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-white/10">
-                                        <span className="text-white font-bold">#{sale.id.slice(-3)}</span>
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center border border-white/10">
+                                        <span className="text-white text-xs font-bold">#{sale.clientTransactionId.slice(-4)}</span>
                                     </div>
                                     <div>
-                                        <div className="text-white font-medium truncate max-w-[150px]">{sale.customer?.fullName || sale.client}</div>
-                                        <div className="text-white/40 text-xs">{new Date(sale.date).toLocaleTimeString()}</div>
+                                        <div className="text-white font-medium truncate max-w-[200px]">
+                                            {sale.customer?.firstName} {sale.customer?.lastName}
+                                        </div>
+                                        <div className="text-white/40 text-[10px] flex items-center gap-2">
+                                            <span>{new Date(sale.confirmedAt).toLocaleTimeString()}</span>
+                                            <span className="w-1 h-1 rounded-full bg-white/20" />
+                                            <span>{sale.ticketNumbers.length} tickets</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-white font-bold">${sale.total}</div>
-                                    <div className="text-emerald-400 text-[10px] font-bold uppercase">Pagado</div>
+                                    <div className="text-emerald-400 font-bold text-sm">+${sale.amount}</div>
+                                    <div className="text-white/20 text-[9px] uppercase tracking-wider font-bold">SALE_PAID</div>
                                 </div>
                             </div>
                         ))}
-                        {sales.length === 0 && !loading && (
-                            <div className="text-center py-10 text-white/40">No hay ventas recientes</div>
+                        {recentSales.length === 0 && !loading && (
+                            <div className="text-center py-10 text-white/40 border border-dashed border-white/5 rounded-xl">
+                                No hay ventas en este rango
+                            </div>
                         )}
                         {loading && (
-                            <div className="text-center py-10 text-white/40">Cargando...</div>
+                            <div className="flex justify-center py-20">
+                                <Loader2 className="w-6 h-6 text-white/20 animate-spin" />
+                            </div>
                         )}
                     </div>
                 </div>
 
-                {/* Últimos Tickets Vendidos */}
+                {/* Últimos Números Vendidos */}
                 <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-xl">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-xl font-bold text-white flex items-center gap-2">
                             <Sparkles className="w-5 h-5 text-yellow-500" />
-                            Últimos Tickets Vendidos
+                            Últimos Números Vendidos
                         </h3>
                     </div>
 
                     <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                        {recentTickets.map((ticket: string, i: number) => (
+                        {recentTickets.map((t: any, i: number) => (
                             <motion.div
                                 key={i}
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                transition={{ delay: i * 0.05 }}
-                                className="p-3 bg-white/5 rounded-xl text-center border border-white/10 hover:border-white/30 transition-all font-mono font-bold text-white text-sm"
+                                transition={{ delay: i * 0.02 }}
+                                className="relative group p-3 bg-white/5 rounded-xl text-center border border-white/10 hover:border-emerald-500/30 transition-all"
                             >
-                                {ticket}
+                                <div className="font-mono font-bold text-white text-sm">
+                                    {t.number.toString().padStart(4, '0')}
+                                </div>
+                                <div className="absolute inset-x-0 -top-full flex justify-center opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-10">
+                                    <div className="bg-emerald-600 text-[9px] text-white px-2 py-1 rounded shadow-lg">
+                                        {t.customer?.firstName}
+                                    </div>
+                                </div>
                             </motion.div>
                         ))}
                         {recentTickets.length === 0 && !loading && (
-                            <div className="col-span-full text-center py-10 text-white/40">No hay tickets vendidos</div>
+                            <div className="col-span-full text-center py-10 text-white/40 border border-dashed border-white/5 rounded-xl">
+                                No hay números vendidos
+                            </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* Daily Trend (Optional/Mini Table) */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 overflow-hidden">
+                <h3 className="text-white font-bold mb-4 flex items-center gap-2">
+                    <BarChart3 className="w-5 h-5 text-blue-400" />
+                    Tendencia últimos 7 días
+                </h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm border-collapse">
+                        <thead>
+                            <tr className="border-b border-white/10">
+                                <th className="pb-3 text-white/40 font-medium">Fecha</th>
+                                <th className="pb-3 text-white/40 font-medium text-center">Visitas</th>
+                                <th className="pb-3 text-white/40 font-medium text-center">Ventas</th>
+                                <th className="pb-3 text-white/40 font-medium text-center">Tickets</th>
+                                <th className="pb-3 text-white/40 font-medium text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                            {summary?.dailyTrends?.map((day: any) => (
+                                <tr key={day.date} className="hover:bg-white/5 transition-colors">
+                                    <td className="py-3 text-white font-medium">{day.date}</td>
+                                    <td className="py-3 text-white/60 text-center">{day.visits}</td>
+                                    <td className="py-3 text-white/60 text-center">{day.salesCount}</td>
+                                    <td className="py-3 text-white/60 text-center">{day.ticketsSold}</td>
+                                    <td className="py-3 text-emerald-400 font-bold text-right">${day.amount}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -298,7 +389,6 @@ function SalesView() {
     const handleOpenDetail = (sale: any) => {
         setSelectedSale(sale);
         // Ensure editForm has deep copy of customer object to avoid reference issues
-        setEditForm(JSON.parse(JSON.stringify(sale)));
         setIsEditing(false);
     };
 
@@ -673,17 +763,30 @@ function SettingsView() {
     const [saving, setSaving] = useState(false);
     const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [resetting, setResetting] = useState(false);
+    const [confirmText, setConfirmText] = useState('');
 
     const handleReset = async () => {
+        if (confirmText !== 'RESETEAR') {
+            alert('Debes escribir RESETEAR para confirmar');
+            return;
+        }
+
         setResetting(true);
         try {
-            const res = await fetch('/api/admin/reset', { method: 'POST' });
+            const res = await fetch('/api/admin/raffle/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmText })
+            });
+            const data = await res.json();
+
             if (res.ok) {
-                alert('Rifa restablecida con éxito. Todos los números están disponibles.');
+                alert('¡Sorteo restablecido con éxito! Se ha creado una nueva dinámica y los tickets están disponibles.');
                 setShowResetConfirm(false);
+                setConfirmText('');
                 window.location.reload();
             } else {
-                alert('Error al restablecer');
+                alert(data.error || 'Error al restablecer');
             }
         } catch (e) {
             console.error(e);
@@ -894,23 +997,32 @@ function SettingsView() {
                             onClick={() => setShowResetConfirm(true)}
                             className="px-4 py-2 bg-red-600/20 text-red-500 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors font-bold text-sm"
                         >
-                            Restablecer Rifas
+                            Restablecer Sorteo
                         </button>
                     ) : (
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={handleReset}
-                                disabled={resetting}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-bold text-sm shadow-lg shadow-red-600/20"
-                            >
-                                {resetting ? 'Procesando...' : 'Sí, confirmar reset'}
-                            </button>
-                            <button
-                                onClick={() => setShowResetConfirm(false)}
-                                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors text-sm"
-                            >
-                                Cancelar
-                            </button>
+                        <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+                            <input
+                                type="text"
+                                placeholder="Escribe RESETEAR"
+                                value={confirmText}
+                                onChange={(e) => setConfirmText(e.target.value)}
+                                className="px-3 py-2 bg-black/40 border border-red-500/30 rounded-lg text-white text-xs placeholder:text-red-500/30 focus:border-red-500/60 outline-none w-full md:w-32"
+                            />
+                            <div className="flex items-center gap-2 w-full md:w-auto">
+                                <button
+                                    onClick={handleReset}
+                                    disabled={resetting || confirmText !== 'RESETEAR'}
+                                    className="flex-1 md:flex-none px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-bold text-xs disabled:opacity-50"
+                                >
+                                    {resetting ? 'Reseteando...' : 'Confirmar'}
+                                </button>
+                                <button
+                                    onClick={() => { setShowResetConfirm(false); setConfirmText(''); }}
+                                    className="flex-1 md:flex-none px-4 py-2 bg-white/5 text-white/50 rounded-lg hover:bg-white/10 transition-colors text-xs"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1298,6 +1410,148 @@ function CustomersView() {
                     </motion.div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function TicketsView() {
+    const [mode, setMode] = useState<'ALL' | 'SOLD' | 'AVAILABLE'>('ALL');
+    const [page, setPage] = useState(1);
+    const [search, setSearch] = useState('');
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    const pageSize = 200;
+
+    useEffect(() => {
+        setLoading(true);
+        const fetchTickets = async () => {
+            try {
+                const res = await fetch(`/api/admin/tickets?status=${mode}&page=${page}&pageSize=${pageSize}&q=${search}`);
+                const d = await res.json();
+                if (d.ok) setData(d);
+            } catch (err) {
+                console.error('Tickets fetch error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchTickets();
+    }, [mode, page, search]);
+
+    return (
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Header / Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="glass-strong p-6 rounded-2xl border border-white/10 text-center">
+                    <p className="text-white/60 text-sm mb-1">Total Tickets</p>
+                    <p className="text-3xl font-bold text-white">{data?.summary?.total || '9,999'}</p>
+                </div>
+                <div className="glass-strong p-6 rounded-2xl border border-white/10 text-center bg-emerald-500/5">
+                    <p className="text-emerald-400/60 text-sm mb-1">Vendidos</p>
+                    <p className="text-3xl font-bold text-emerald-400">{data?.summary?.sold || 0}</p>
+                </div>
+                <div className="glass-strong p-6 rounded-2xl border border-white/10 text-center bg-blue-500/5">
+                    <p className="text-blue-400/60 text-sm mb-1">Disponibles</p>
+                    <p className="text-3xl font-bold text-blue-400">{data?.summary?.available || 0}</p>
+                </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white/5 p-4 rounded-2xl border border-white/10">
+                <div className="flex gap-2">
+                    {(['ALL', 'SOLD', 'AVAILABLE'] as const).map((m) => (
+                        <button
+                            key={m}
+                            onClick={() => { setMode(m); setPage(1); }}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${mode === m ? 'bg-white text-black' : 'text-white/60 hover:text-white hover:bg-white/5'
+                                }`}
+                        >
+                            {m === 'ALL' ? 'Todos' : m === 'SOLD' ? 'Vendidos' : 'Disponibles'}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="relative w-full md:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                    <input
+                        type="text"
+                        placeholder="Buscar número (0001)..."
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                        className="w-full pl-10 pr-4 py-2 bg-black/20 border border-white/10 rounded-xl text-white text-sm focus:border-white/30 outline-none transition-all"
+                    />
+                </div>
+            </div>
+
+            {/* Ticket Grid */}
+            <div className="glass-strong p-6 rounded-2xl border border-white/10 relative min-h-[400px]">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20 gap-4">
+                        <Loader2 className="w-8 h-8 text-white/20 animate-spin" />
+                        <p className="text-white/40 animate-pulse text-sm">Cargando tickets...</p>
+                    </div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
+                            {data?.tickets?.map((ticket: any) => (
+                                <div
+                                    key={ticket.id}
+                                    title={ticket.status === 'SOLD' ? `Comprador: ${ticket.buyerName} (${ticket.cedula})` : 'Disponible'}
+                                    className={`relative group p-3 rounded-xl border font-mono font-bold text-xs text-center transition-all ${ticket.status === 'SOLD'
+                                        ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
+                                        : 'bg-white/5 border-white/10 text-white/60 hover:border-white/30'
+                                        }`}
+                                >
+                                    {ticket.number}
+                                    {ticket.status === 'SOLD' && (
+                                        <div className="absolute inset-x-0 -bottom-1 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                            <div className="bg-black/90 text-[10px] text-white px-2 py-1 rounded border border-white/10 whitespace-nowrap mb-1 shadow-2xl">
+                                                {ticket.buyerName}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {data?.tickets?.length === 0 && (
+                            <div className="text-center py-20 text-white/40">
+                                No se encontraron tickets para esta selección.
+                            </div>
+                        )}
+
+                        {/* Pagination Footer */}
+                        <div className="mt-8 pt-6 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <p className="text-white/40 text-sm">
+                                Mostrando <span className="text-white font-bold">{data?.tickets?.length || 0}</span> de <span className="text-white font-bold">{data?.pagination?.totalItems || 0}</span> tickets
+                            </p>
+
+                            {data?.pagination?.totalPages > 1 && (
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        disabled={page <= 1}
+                                        onClick={() => setPage(p => p - 1)}
+                                        className="p-2 bg-white/5 border border-white/10 rounded-lg text-white disabled:opacity-20 hover:bg-white/10 transition-colors"
+                                    >
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </button>
+                                    <span className="text-white/60 text-sm font-mono">
+                                        {page} / {data.pagination.totalPages}
+                                    </span>
+                                    <button
+                                        disabled={page >= data.pagination.totalPages}
+                                        onClick={() => setPage(p => p + 1)}
+                                        className="p-2 bg-white/5 border border-white/10 rounded-lg text-white disabled:opacity-20 hover:bg-white/10 transition-colors"
+                                    >
+                                        <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
     );
 }

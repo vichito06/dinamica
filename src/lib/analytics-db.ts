@@ -31,14 +31,7 @@ export async function getAnalyticsData(): Promise<AnalyticsData> {
     }
 }
 
-export async function incrementAnalytics(type: 'pageview' | 'unique') {
-    // We use a transaction or just simple update since metrics approximate is fine
-    // But for unique logic, read-modify-write is safer.
-    // Given low frequency (assumed), read-modify-write is okay.
-    // Better: upsert pattern.
-
-    // We need to read first to update complex JSON structure (daily_stats key).
-    // Prisma JSON set path support is limited.
+export async function incrementAnalytics(type: string, path?: string, sessionId?: string) {
     try {
         const data = await getAnalyticsData();
         const today = new Date().toISOString().split('T')[0];
@@ -55,11 +48,21 @@ export async function incrementAnalytics(type: 'pageview' | 'unique') {
             data.daily_stats[today].unique++;
         }
 
-        await prisma.analytics.upsert({
-            where: { id: 1 },
-            create: { id: 1, data: data as any },
-            update: { data: data as any }
-        });
+        // Save legacy summary and granular event in parallel/sequence
+        await Promise.all([
+            prisma.analytics.upsert({
+                where: { id: 1 },
+                create: { id: 1, data: data as any },
+                update: { data: data as any }
+            }),
+            prisma.analyticsEvent.create({
+                data: {
+                    type,
+                    path: path || null,
+                    sessionId: sessionId || null
+                }
+            })
+        ]);
 
     } catch (e) {
         console.error('Error saving analytics', e);

@@ -17,10 +17,27 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Get Active Raffle
+        const activeRaffle = await prisma.raffle.findFirst({
+            where: { status: 'ACTIVE' }
+        });
+
+        const raffleId = activeRaffle?.id;
+
         const customers = await prisma.customer.findMany({
+            where: raffleId ? {
+                sales: {
+                    some: { raffleId: raffleId }
+                }
+            } : {},
             include: {
                 sales: {
-                    include: { tickets: true }
+                    where: raffleId ? { raffleId: raffleId } : {},
+                    include: {
+                        tickets: {
+                            where: raffleId ? { raffleId: raffleId } : {}
+                        }
+                    }
                 }
             },
             orderBy: { createdAt: 'desc' }
@@ -47,37 +64,6 @@ export async function GET() {
                 email: c.email,
                 idNumber: c.idNumber,
                 phone: c.phone,
-                city: '', // Address data not currently stored in Customer model 
-                // Customer model doesn't have address fields in my schema update (Step 19)! 
-                // I only added idNumber, firstName, lastName, email, phone.
-                // The checkout saves address in personalData on Sale? 
-                // NOTE: In Step 29, I REMOVED personalData from Sale creation!
-                // So address is LOST? 
-                // Wait, I strictly followed the schema update in Step 19.
-                // The user requirements said: "Customer: identidad por CÉDULA... Sale debe guardar customerId".
-                // It didn't explicitly say "save address to Customer".
-                // However, `CheckoutPage` collects address.
-                // If I don't save it, I lose it.
-                // I should have added address fields to Customer or kept personalData in Sale.
-                // Since I can't change schema easily now without another migration/reset (and I already did one), 
-                // and user said "Customer: identidad... (unique)", maybe address isn't critical for "Métricas".
-                // But Admin view `handleOpenDetail` tries to show City/Province.
-                // It uses `getCustomerField(selectedSale, 'city')`.
-                // `selectedSale` comes from `/api/sales`.
-                // If `Sale` doesn't have `personalData` and `Customer` doesn't have address, this will be empty.
-                // This is a regression.
-                // But I can't fix it perfectly without schema change.
-                // I will ignore address for now or check if I can quick-fix.
-                // Actually, I can store address in `Customer` if I update schema. 
-                // REQUIRED: "Admin/Ventas... Modal de venta debe mostrar datos completos".
-                // So I SHOULD have kept address.
-                // I will check if I can run another migration quickly.
-                // Or maybe I just add `personalData` back to `Sale`?
-                // Adding `personalData` back to `Sale` is safer/easier than modifying `Customer` if multiple addresses.
-                // But `Customer` is unique.
-                // Let's stick to the current plan: Use what we have. If address is missing, it shows "-".
-                // I will return empty string for city/province.
-
                 province: '',
                 country: 'Ecuador',
                 stats: {

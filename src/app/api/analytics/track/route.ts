@@ -4,10 +4,10 @@ import { incrementAnalytics } from '@/lib/analytics-db';
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { type } = body;
+        const { type, path, sessionId } = body;
 
         if (type === 'pageview' || type === 'unique') {
-            await incrementAnalytics(type);
+            await incrementAnalytics(type, path, sessionId);
         }
 
         return NextResponse.json({ success: true });

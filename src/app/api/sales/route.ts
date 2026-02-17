@@ -65,6 +65,8 @@ export async function POST(request: Request) {
                     lastName: personalData.lastName?.toUpperCase(),
                     email: personalData.email,
                     phone: personalData.phone,
+                    province: personalData.province,
+                    city: personalData.city,
                 },
                 create: {
                     idNumber: personalData.idNumber,
@@ -72,6 +74,8 @@ export async function POST(request: Request) {
                     lastName: personalData.lastName?.toUpperCase(),
                     email: personalData.email,
                     phone: personalData.phone,
+                    province: personalData.province,
+                    city: personalData.city,
                 },
             });
 
@@ -189,13 +193,19 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const q = searchParams.get('q');
 
-        let whereClause: any = {};
+        // Get Active Raffle
+        const activeRaffle = await prisma.raffle.findFirst({
+            where: { status: 'ACTIVE' }
+        });
+
+        let whereClause: any = activeRaffle ? { raffleId: activeRaffle.id } : {};
 
         if (q) {
             const isNumeric = /^\d+$/.test(q);
             if (isNumeric) {
                 // Search by ticket number or ID number (internal query allowed)
                 whereClause = {
+                    ...whereClause,
                     OR: [
                         { tickets: { some: { number: parseInt(q) } } },
                         { customer: { idNumber: { contains: q } } }
@@ -204,6 +214,7 @@ export async function GET(request: Request) {
             } else {
                 // Search by name or email (internal query allowed)
                 whereClause = {
+                    ...whereClause,
                     OR: [
                         { customer: { firstName: { contains: q, mode: 'insensitive' } } },
                         { customer: { lastName: { contains: q, mode: 'insensitive' } } },
