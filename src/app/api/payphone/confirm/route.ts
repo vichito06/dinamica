@@ -85,7 +85,6 @@ export async function POST(req: Request) {
                 });
 
                 // 2. Mark as SOLD (only if currently RESERVED)
-                // We clear session and TTL data to indicate final ownership
                 await tx.ticket.updateMany({
                     where: {
                         saleId: sale.id,
@@ -100,7 +99,7 @@ export async function POST(req: Request) {
             });
             console.log(`[PayPhone Confirm] Sale ${sale.id} confirmed as PAID`);
 
-            // Intentar enviar correo
+            // Intentar enviar correo con manejo de rate limit
             try {
                 const emailResult = await sendTicketsEmail({
                     to: sale.customer.email,
@@ -110,11 +109,18 @@ export async function POST(req: Request) {
                     total: sale.amountCents / 100
                 });
                 emailSent = emailResult.success;
+                if (emailSent) {
+                    await prisma.sale.update({
+                        where: { id: sale.id },
+                        data: { lastEmailSentAt: new Date() }
+                    });
+                } else {
+                    console.warn(`[PayPhone Confirm] Email not sent: ${emailResult.error}`);
+                }
             } catch (emailErr) {
                 console.error("[PayPhone Confirm] Email sending failed:", emailErr);
                 emailSent = false;
             }
-
         } else if (isCanceled) {
             await prisma.$transaction([
                 prisma.sale.update({
@@ -123,19 +129,25 @@ export async function POST(req: Request) {
                 }),
                 prisma.ticket.updateMany({
                     where: { saleId: sale.id },
-                    data: { status: TicketStatus.AVAILABLE, saleId: null, reservedUntil: null }
+                    data: { status: TicketStatus.AVAILABLE, saleId: null, reservedUntil: null, sessionId: null }
                 })
             ]);
             console.warn(`[PayPhone Confirm] Sale ${sale.id} rejected/canceled (ST:${data.statusCode})`);
         }
 
-        return NextResponse.json({
+        return new NextResponse(JSON.stringify({
             ok: true,
             status: data.status,
             statusCode: data.statusCode,
             saleId: sale.id,
             ticketNumbers: isPaid ? ticketNumbers : [],
             emailSent: emailSent
+        }), {
+            status: 200,
+            headers: {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-store, max-age=0'
+            }
         });
 
     } catch (error: any) {

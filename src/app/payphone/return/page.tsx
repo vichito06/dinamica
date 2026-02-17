@@ -30,42 +30,44 @@ function ReturnContent() {
 
         const confirmPayment = async () => {
             try {
+                // Use Cache-Control 'no-store' and local state for instant display
                 const response = await fetch('/api/payphone/confirm', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, clientTransactionId: clientTxId })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-store'
+                    },
+                    body: JSON.stringify({ id, clientTransactionId: clientTxId }),
+                    cache: 'no-store'
                 });
 
                 const data = await response.json();
 
-                // 2) guarda para debug 
+                // Store for debugging
                 localStorage.setItem("last_payphone_confirm", JSON.stringify(data));
 
-                // PayPhone statusCode: 3 approved, 2 canceled.
                 if (response.ok && data.statusCode === 3) {
                     setStatus('success');
-                    setTicketNumbers(data.ticketNumbers || []);
-                    setEmailSent(data.emailSent || false);
                     setSaleId(data.saleId);
+                    // Use numbers from API response immediately
+                    const nums = data.ticketNumbers || [];
+                    setTicketNumbers(nums);
+                    setEmailSent(data.emailSent || false);
 
-                    // Clear checkout session (Unified Keys)
+                    // Clear session/checkout data
                     sessionStorage.removeItem('checkout:selectedTickets');
                     sessionStorage.removeItem('yvossoeee_sessionId');
-                    // Legacy cleanup
-                    localStorage.removeItem('selectedNumbers');
-                    localStorage.removeItem('yvossoeee_selectedNumbers');
-                    localStorage.removeItem('yvossoeee_sessionId');
                 } else if (data.statusCode === 2) {
                     setStatus('error');
-                    setMessage('El pago fue cancelado por el usuario.');
+                    setMessage('El pago fue rechazado o cancelado.');
                 } else {
                     setStatus('error');
-                    setMessage(data.error || 'El pago no pudo ser verificado o no fue aprobado.');
+                    setMessage(data.error || 'No se pudo verificar el estado del pago.');
                 }
             } catch (error) {
                 console.error('Confirmation error:', error);
                 setStatus('error');
-                setMessage('Error de conexión al confirmar el pago.');
+                setMessage('Error de comunicación. Si tu pago se descontó, contacta a soporte.');
             }
         };
 
@@ -125,10 +127,18 @@ function ReturnContent() {
                                             body: JSON.stringify({ saleId })
                                         });
                                         const d = await res.json();
-                                        if (res.ok) setResendStatus('success');
-                                        else throw new Error(d.error);
+                                        if (res.ok) {
+                                            setResendStatus('success');
+                                            setTimeout(() => setResendStatus(null), 5000);
+                                        } else {
+                                            setMessage(d.error || 'Error al reenviar');
+                                            setResendStatus('error');
+                                            setTimeout(() => setResendStatus(null), 5000);
+                                        }
                                     } catch (e: any) {
                                         setResendStatus('error');
+                                        setMessage('Error de conexión');
+                                        setTimeout(() => setResendStatus(null), 5000);
                                     } finally {
                                         setIsResending(false);
                                     }
@@ -146,6 +156,10 @@ function ReturnContent() {
                                         <Check className="w-3 h-3 text-green-500" />
                                         ¡Correo reenviado!
                                     </>
+                                ) : resendStatus === 'error' ? (
+                                    <span className="text-red-400">
+                                        {message || "No se pudo reenviar"}
+                                    </span>
                                 ) : (
                                     "¿No recibiste el correo? Reenviar"
                                 )}

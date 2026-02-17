@@ -66,17 +66,36 @@ export async function sendTicketsEmail({
     `;
 
     try {
-        const data = await resend.emails.send({
+        console.log(`[Email] Attempting to send to ${to} (Sale: #${saleCode})`);
+        const { data, error } = await resend.emails.send({
             from: fromEmail,
             to,
-            subject: `Tus Tickets - Compra #${saleCode}`,
+            subject: `🎟️ Tus Tickets de la Suerte - Compra #${saleCode}`,
             html: htmlContent,
         });
 
-        console.log(`[Email] Sent to ${to} | ID: ${data.data?.id}`);
+        if (error) {
+            // Check for rate limit or other specific errors
+            const isRateLimit = (error as any).statusCode === 429;
+            console.error(`[Email] Resend error for Sale #${saleCode}:`, {
+                name: error.name,
+                message: error.message,
+                isRateLimit
+            });
+            return {
+                success: false,
+                error: error.message,
+                isRateLimit
+            };
+        }
+
+        console.log(`[Email] Successfully sent to ${to} | Resend ID: ${data?.id}`);
         return { success: true, data };
-    } catch (error) {
-        console.error('[Email] Error sending email:', error);
-        return { success: false, error: 'Email send failed' };
+    } catch (error: any) {
+        console.error(`[Email] Critical crash sending email for Sale #${saleCode}:`, error);
+        return {
+            success: false,
+            error: error.message || 'Unknown crash'
+        };
     }
 }

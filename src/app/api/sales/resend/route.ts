@@ -13,18 +13,33 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Falta ID de venta' }, { status: 400 });
         }
 
+        // Read additional info directly from Sale table
         const sale = await prisma.sale.findUnique({
             where: { id: saleId },
             include: { customer: true }
         });
 
         if (!sale || sale.status !== 'PAID') {
-            return NextResponse.json({ error: 'Venta no encontrada o no pagada' }, { status: 404 });
+            return NextResponse.json({ error: 'La venta no se encuentra o no ha sido pagada.' }, { status: 404 });
         }
 
-        // Use snapshot numbers if available, fallback to relation
+        // Implementation of a short cool-down to prevent spam (60 seconds)
+        if (sale.lastEmailSentAt) {
+            const now = new Date();
+            const lastSent = new Date(sale.lastEmailSentAt);
+            const secondsSince = (now.getTime() - lastSent.getTime()) / 1000;
+            if (secondsSince < 60) {
+                const wait = Math.ceil(60 - secondsSince);
+                return NextResponse.json({
+                    error: `Espera ${wait} segundos antes de solicitar otro envío.`
+                }, { status: 429 });
+            }
+        }
+
+        // Use snapshot numbers as primary source
         let tickets = sale.ticketNumbers;
-        if (tickets.length === 0) {
+        if (!tickets || tickets.length === 0) {
+            // Fallback just in case snapshot failed during confirm
             const ticketRecords = await prisma.ticket.findMany({
                 where: { saleId: sale.id },
                 orderBy: { number: 'asc' }
@@ -41,13 +56,17 @@ export async function POST(request: Request) {
         });
 
         if (!emailResult.success) {
-            return NextResponse.json({ error: 'No se pudo enviar el correo', detail: emailResult.error }, { status: 500 });
+            const isRateLimit = (emailResult as any).isRateLimit;
+            return NextResponse.json({
+                error: isRateLimit ? 'Límite de envíos alcanzado por ahora. Intenta en unos minutos.' : 'No se pudo enviar el correo.',
+                detail: emailResult.error
+            }, { status: isRateLimit ? 429 : 500 });
         }
 
-        return NextResponse.json({ ok: true, message: 'Correo reenviado con éxito' });
+        return NextResponse.json({ ok: true, message: '¡Correo reenviado con éxito!' });
 
     } catch (error: any) {
         console.error('[Resend API] Error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return NextResponse.json({ error: 'Error interno al procesar el reenvío.' }, { status: 500 });
     }
 }

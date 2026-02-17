@@ -54,7 +54,6 @@ model Sale {
   customer                  Customer        @relation(fields: [customerId], references: [id])
   tickets                   Ticket[]
   ticketNumbers             String[]        @default([])
-  lastEmailSentAt           DateTime?
 }
 
 model Customer {
