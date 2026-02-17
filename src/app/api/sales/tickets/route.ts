@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { TicketStatus } from "@prisma/client";
+import { recoverTicketNumbers } from "@/lib/ticketNumbersRecovery";
 
 export const runtime = "nodejs";
 
@@ -12,39 +12,25 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: 'Missing saleId' }, { status: 400 });
         }
 
-        const sale = await prisma.sale.findUnique({
-            where: { id: saleId },
-            include: { tickets: { orderBy: { number: 'asc' } } }
-        });
+        // Use the unified core recovery logic
+        const recovery = await recoverTicketNumbers(prisma, saleId);
 
-        if (!sale) {
-            return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
-        }
+        console.log(`[sales/tickets] saleId=${saleId} source=${recovery.source} snapshot=${recovery.counts.snapshot} sold=${recovery.counts.sold} reserved=${recovery.counts.reserved}`);
 
-        const pad4 = (num: number | string) => String(num).padStart(4, '0');
-
-        // Logic sync with /confirm: Snapshot -> SOLD Tickets
-        const snapshot: string[] = (sale as any).ticketNumbers || [];
-        let tickets: string[] = [...snapshot];
-
-        if (tickets.length === 0) {
-            const soldTickets = await prisma.ticket.findMany({
-                where: { saleId: sale.id, status: TicketStatus.SOLD },
-                orderBy: { number: 'asc' }
-            });
-            tickets = soldTickets.map(t => pad4(t.number));
-
-            console.log(`[sales/tickets] saleId=${sale.id} snapshotCount=${snapshot.length} soldCount=${soldTickets.length} (RECOVERED)`);
-        } else {
-            // Ensure format and order even for snapshots
-            tickets = tickets.map(n => pad4(n)).sort();
-            console.log(`[sales/tickets] saleId=${sale.id} snapshotCount=${snapshot.length} soldCount=0 (FROM_SNAPSHOT)`);
+        if (recovery.numbers.length === 0) {
+            return NextResponse.json({
+                ok: true,
+                saleId,
+                ticketNumbers: [],
+                reason: "No paid/reserved tickets found for this sale."
+            }, { headers: { 'Cache-Control': 'no-store' } });
         }
 
         return NextResponse.json({
             ok: true,
-            saleId: sale.id,
-            ticketNumbers: tickets
+            saleId,
+            ticketNumbers: recovery.numbers,
+            source: recovery.source
         }, {
             headers: { 'Cache-Control': 'no-store' }
         });

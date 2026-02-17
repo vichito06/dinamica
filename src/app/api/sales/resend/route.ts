@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendTicketsEmail } from '@/lib/email';
+import { recoverTicketNumbers } from '@/lib/ticketNumbersRecovery';
 
 export const runtime = 'nodejs';
 
@@ -24,9 +25,9 @@ export async function POST(request: Request) {
         }
 
         // Implementation of a short cool-down to prevent spam (60 seconds)
-        if (sale.lastEmailSentAt) {
+        if ((sale as any).lastEmailSentAt) {
             const now = new Date();
-            const lastSent = new Date(sale.lastEmailSentAt);
+            const lastSent = new Date((sale as any).lastEmailSentAt);
             const secondsSince = (now.getTime() - lastSent.getTime()) / 1000;
             if (secondsSince < 60) {
                 const wait = Math.ceil(60 - secondsSince);
@@ -36,15 +37,14 @@ export async function POST(request: Request) {
             }
         }
 
-        // Use snapshot numbers as primary source
-        let tickets = sale.ticketNumbers;
-        if (!tickets || tickets.length === 0) {
-            // Fallback just in case snapshot failed during confirm
-            const ticketRecords = await prisma.ticket.findMany({
-                where: { saleId: sale.id },
-                orderBy: { number: 'asc' }
-            });
-            tickets = ticketRecords.map(t => t.number.toString().padStart(4, '0'));
+        // Use snapshot numbers or recover/repair if missing
+        const recovery = await prisma.$transaction(async (tx) => {
+            return await recoverTicketNumbers(tx, sale.id);
+        });
+
+        const tickets = recovery.numbers;
+        if (tickets.length === 0) {
+            return NextResponse.json({ error: 'No se encontraron tickets para esta venta.' }, { status: 404 });
         }
 
         const emailResult = await sendTicketsEmail({

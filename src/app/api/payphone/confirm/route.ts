@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 import { sendTicketsEmail } from "@/lib/email";
+import { recoverTicketNumbers } from "@/lib/ticketNumbersRecovery";
 
 export const runtime = "nodejs";
 
@@ -168,11 +169,11 @@ export async function POST(req: Request) {
         // Final response calculation for NEW payments
         let finalResponseTickets = ticketNumbers; // use local if we just processed it
         if (isPaid && finalResponseTickets.length === 0) {
-            const recoveryTickets = await prisma.ticket.findMany({
-                where: { saleId: sale.id, status: TicketStatus.SOLD },
-                orderBy: { number: 'asc' }
+            const recovery = await prisma.$transaction(async (tx) => {
+                return await recoverTicketNumbers(tx, sale.id);
             });
-            finalResponseTickets = recoveryTickets.map(t => String(t.number).padStart(4, '0'));
+            finalResponseTickets = recovery.numbers;
+            console.log(`[PayPhone Confirm] Recovery for NEW payment: saleId=${sale.id} source=${recovery.source} tickets=${finalResponseTickets.length}`);
         }
 
         return new NextResponse(JSON.stringify({
