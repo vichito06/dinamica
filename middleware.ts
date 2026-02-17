@@ -4,12 +4,22 @@ import type { NextRequest } from 'next/server';
 
 export function middleware(request: NextRequest) {
     const path = request.nextUrl.pathname;
+    const adminAuth = request.cookies.get('admin_auth');
+    const isAuthenticated = adminAuth?.value === 'true';
 
-    // Check if the path starts with /admin
+    // Handle API Admin routes
+    if (path.startsWith('/api/admin')) {
+        if (!isAuthenticated) {
+            return new NextResponse(
+                JSON.stringify({ success: false, error: 'Unauthenticated' }),
+                { status: 401, headers: { 'content-type': 'application/json' } }
+            );
+        }
+        return NextResponse.next();
+    }
+
+    // Handle Admin UI routes
     if (path.startsWith('/admin')) {
-        const adminAuth = request.cookies.get('admin_auth');
-        const isAuthenticated = adminAuth?.value === 'true';
-
         // 1. If trying to access login page (/admin) while authenticated -> redirect to dashboard
         if (path === '/admin' && isAuthenticated) {
             return NextResponse.redirect(new URL('/admin/dashboard', request.url));
@@ -26,15 +36,5 @@ export function middleware(request: NextRequest) {
 
 // Configure which paths the middleware runs on
 export const config = {
-    matcher: [
-        /*
-         * Match all request paths except for the ones starting with:
-         * - api (API routes)
-         * - _next/static (static files)
-         * - _next/image (image optimization files)
-         * - favicon.ico (favicon file)
-         * - logo.png (public assets)
-         */
-        '/((?!api|_next/static|_next/image|favicon.ico|site.webmanifest|logo.png|payphone-logo.png).*)',
-    ],
+    matcher: ["/admin/:path*", "/api/admin/:path*"],
 };
