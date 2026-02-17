@@ -1,38 +1,42 @@
-
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { createHmac } from 'crypto';
 
 export async function POST(request: Request) {
     try {
         const { password } = await request.json();
-        const adminPassword = (process.env.ADMIN_PASSWORD ?? "").trim();
-        const inputPassword = (password ?? "").trim();
 
-        console.log("[ADMIN_LOGIN_ENV]", {
-            hasEnv: Boolean(process.env.ADMIN_PASSWORD),
-            len: (process.env.ADMIN_PASSWORD ?? "").length,
-            first: (process.env.ADMIN_PASSWORD ?? "").slice(0, 3),
-            last: (process.env.ADMIN_PASSWORD ?? "").slice(-3),
-        });
+        const normalize = (s: string | undefined | null) =>
+            (s ?? "").trim().replace(/\.+$/, ""); // quita SOLO puntos al final
 
-        if (!adminPassword) {
-            console.error('ADMIN_PASSWORD is not set in environment variables');
+        const adminPassword = normalize(process.env.ADMIN_PASSWORD);
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+
+        if (!adminPassword || !secret) {
             return NextResponse.json(
-                { error: 'Error de configuración del servidor' },
+                { success: false, error: 'Missing environment configuration' },
                 { status: 500 }
             );
         }
 
-        if (inputPassword === adminPassword) {
-            // Set HttpOnly cookie
-            const cookieStore = await cookies();
-            // Set a cookie valid for 1 day
-            const oneDay = 24 * 60 * 60 * 1000;
+        const inputPassword = normalize(password);
 
-            cookieStore.set('admin_auth', 'true', {
+        if (inputPassword === adminPassword) {
+            // Create a signed session token
+            // HMAC(payload, secret)
+            const signature = createHmac('sha256', secret)
+                .update('admin-session')
+                .digest('hex');
+
+            const cookieStore = await cookies();
+
+            // Set for 24 hours
+            const oneDay = 24 * 60 * 60;
+
+            cookieStore.set('admin_session', signature, {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
-                sameSite: 'strict',
+                sameSite: 'lax',
                 maxAge: oneDay,
                 path: '/',
             });
@@ -41,12 +45,12 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json(
-            { error: 'Contraseña incorrecta' },
+            { success: false, error: 'Contraseña incorrecta' },
             { status: 401 }
         );
     } catch (error) {
         return NextResponse.json(
-            { error: 'Error interno del servidor' },
+            { success: false, error: 'Error interno del servidor' },
             { status: 500 }
         );
     }
