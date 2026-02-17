@@ -14,6 +14,9 @@ function ReturnContent() {
     const [message, setMessage] = useState('');
     const [ticketNumbers, setTicketNumbers] = useState<string[]>([]);
     const [emailSent, setEmailSent] = useState(false);
+    const [saleId, setSaleId] = useState<string | null>(null);
+    const [isResending, setIsResending] = useState(false);
+    const [resendStatus, setResendStatus] = useState<string | null>(null);
 
     useEffect(() => {
         const id = searchParams.get('id');
@@ -43,6 +46,7 @@ function ReturnContent() {
                     setStatus('success');
                     setTicketNumbers(data.ticketNumbers || []);
                     setEmailSent(data.emailSent || false);
+                    setSaleId(data.saleId);
 
                     // Clear checkout session (Unified Keys)
                     sessionStorage.removeItem('checkout:selectedTickets');
@@ -92,29 +96,70 @@ function ReturnContent() {
                     <p className="text-white/60 mb-6 text-sm">
                         {emailSent
                             ? "Hemos enviado los detalles y tus números a tu correo electrónico."
-                            : "Tu pago se procesó pero no pudimos enviar el correo. ¡No te preocupes! Aquí están tus números:"}
+                            : "Tu pago se procesó exitosamente. Si el correo tarda, aquí puedes ver tus números:"}
                     </p>
 
                     {/* Ticket Display Grid */}
-                    <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 mb-8">
+                    <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
                         <h3 className="text-white font-bold mb-4 uppercase tracking-wider text-xs opacity-50">Tus Números de la Suerte</h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                             {ticketNumbers.map(num => (
-                                <div key={num} className="bg-white/10 border border-white/10 py-3 rounded-xl text-white font-mono font-bold text-lg shadow-inner">
+                                <div key={num} className="bg-white/10 border border-white/10 py-3 rounded-xl text-white font-mono font-bold text-lg shadow-inner text-center">
                                     {num}
                                 </div>
                             ))}
                         </div>
-                        {ticketNumbers.length === 0 && <p className="text-white/40 italic">Cargando números...</p>}
+                        {ticketNumbers.length === 0 && <p className="text-white/40 italic text-sm">Registrando tus números...</p>}
                     </div>
 
-                    <Link
-                        href="/"
-                        className="w-full sm:w-auto px-10 py-4 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-white/10"
-                    >
-                        Volver al Inicio
-                        <ArrowRight className="w-5 h-5" />
-                    </Link>
+                    <div className="flex flex-col gap-4 w-full mb-8">
+                        {saleId && (
+                            <button
+                                onClick={async () => {
+                                    setIsResending(true);
+                                    setResendStatus(null);
+                                    try {
+                                        const res = await fetch('/api/sales/resend', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ saleId })
+                                        });
+                                        const d = await res.json();
+                                        if (res.ok) setResendStatus('success');
+                                        else throw new Error(d.error);
+                                    } catch (e: any) {
+                                        setResendStatus('error');
+                                    } finally {
+                                        setIsResending(false);
+                                    }
+                                }}
+                                disabled={isResending}
+                                className="text-white/60 hover:text-white text-xs flex items-center justify-center gap-2 transition-colors"
+                            >
+                                {isResending ? (
+                                    <>
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        Reenviando...
+                                    </>
+                                ) : resendStatus === 'success' ? (
+                                    <>
+                                        <Check className="w-3 h-3 text-green-500" />
+                                        ¡Correo reenviado!
+                                    </>
+                                ) : (
+                                    "¿No recibiste el correo? Reenviar"
+                                )}
+                            </button>
+                        )}
+
+                        <Link
+                            href="/"
+                            className="w-full sm:w-auto px-10 py-4 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-white/10 mx-auto"
+                        >
+                            Volver al Inicio
+                            <ArrowRight className="w-5 h-5" />
+                        </Link>
+                    </div>
                 </div>
             )}
 

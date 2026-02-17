@@ -72,14 +72,15 @@ export async function POST(req: Request) {
 
         if (isPaid) {
             await prisma.$transaction(async (tx) => {
-                // 1. Update Sale
+                // 1. Update Sale with payout info and ticket snapshot
                 await tx.sale.update({
                     where: { id: sale.id },
                     data: {
                         status: SaleStatus.PAID,
                         confirmedAt: new Date(),
                         payphoneStatusCode: data.statusCode,
-                        payphoneAuthorizationCode: String(data.authorizationCode || '')
+                        payphoneAuthorizationCode: String(data.authorizationCode || ''),
+                        ticketNumbers: ticketNumbers // Snapshot
                     }
                 });
 

@@ -53,6 +53,7 @@ export async function POST(request: Request) {
             ok: true,
             released: releasedCount,
             skipped: skippedCount,
+            total: totalRequested,
             requestId
         });
 
