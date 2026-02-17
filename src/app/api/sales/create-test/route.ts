@@ -36,17 +36,29 @@ export async function POST(request: Request) {
             }
         });
 
+        // Get Active Raffle
+        const raffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
+        if (!raffle) {
+            return NextResponse.json({ ok: false, error: 'No active raffle' }, { status: 404 });
+        }
+
         // Buscar un ticket disponible
         let ticket = await prisma.ticket.findFirst({
-            where: { status: TicketStatus.AVAILABLE },
+            where: {
+                status: TicketStatus.AVAILABLE,
+                raffleId: raffle.id
+            },
             orderBy: { number: 'desc' }
         });
 
         if (!ticket) {
             ticket = await prisma.ticket.upsert({
-                where: { number: 99999 },
+                where: {
+                    raffleId_number: { raffleId: raffle.id, number: 99999 },
+                },
                 update: { status: TicketStatus.AVAILABLE },
                 create: {
+                    raffleId: raffle.id,
                     number: 99999,
                     status: TicketStatus.AVAILABLE
                 }
@@ -61,7 +73,8 @@ export async function POST(request: Request) {
                     amountCents: 100, // $1.00
                     currency: 'USD',
                     customerId: testCustomer.id,
-                    provider: 'PAYPHONE'
+                    provider: 'PAYPHONE',
+                    raffleId: raffle.id
                 }
             });
 
