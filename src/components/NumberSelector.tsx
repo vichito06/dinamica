@@ -178,7 +178,13 @@ export default function NumberSelector() {
 
     const handleContinue = () => {
         if (selectedNumbers.length > 0) {
-            // Generate or get sessionId
+            const BRIDGE_KEY = "checkout:selectedTickets";
+            const nums = Array.from(new Set(selectedNumbers)); // dedupe
+
+            // Save to sessionStorage bridge for SPA navigation (pure array as requested)
+            sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(nums));
+
+            // Ensure sessionId exists in localStorage
             let sessionId = localStorage.getItem('yvossoeee_sessionId');
             if (!sessionId) {
                 sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
@@ -187,7 +193,9 @@ export default function NumberSelector() {
                 localStorage.setItem('yvossoeee_sessionId', sessionId);
             }
 
-            localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(selectedNumbers));
+            // Also keep in localStorage for resilience (will be cleared on F5)
+            localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(nums));
+
             router.push('/checkout');
         }
     };

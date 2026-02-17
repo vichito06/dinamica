@@ -12,6 +12,21 @@ import { ECUADOR_PROVINCES, COUNTRIES } from '@/lib/data';
 type CheckoutStep = 'personal' | 'payment' | 'confirmation';
 
 export default function CheckoutClient() {
+    const BRIDGE_KEY = "checkout:selectedTickets";
+
+    const readBridge = (): number[] => {
+        try {
+            const raw = sessionStorage.getItem(BRIDGE_KEY);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) {
+            console.error("[CheckoutClient] Error parsing bridge data", e);
+            sessionStorage.removeItem(BRIDGE_KEY); // Clear garbage
+            return [];
+        }
+    };
+
     const router = useRouter();
     const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
     const [currentStep, setCurrentStep] = useState<CheckoutStep>('personal');
@@ -57,63 +72,66 @@ export default function CheckoutClient() {
 
         const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
         const savedSessionId = localStorage.getItem('yvossoeee_sessionId');
+        const bridgeNums = readBridge();
 
-        // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5)
+        // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5) 
+        // AND only if there's something to clean up (as requested)
         if (isHardReload()) {
-            // Always ensure local state is clean
-            setSelectedNumbers([]);
+            const hasStoredSelection = bridgeNums.length > 0 || savedNumbers;
 
-            // Remove from storage instantly
-            localStorage.removeItem('yvossoeee_selectedNumbers');
-            localStorage.removeItem('yvossoeee_sessionId');
-            localStorage.removeItem('selectedNumbers'); // Legacy
-            localStorage.removeItem('selectedTickets'); // Legacy
-            localStorage.removeItem('ticket-store');    // Legacy
-            sessionStorage.removeItem('selectedNumbers'); // Legacy
+            if (hasStoredSelection) {
+                console.log("[CheckoutClient] Hard Reload with selection. Clearing and redirecting.");
 
-            if (savedNumbers && savedSessionId) {
-                try {
-                    const numbers = JSON.parse(savedNumbers);
-                    if (Array.isArray(numbers) && numbers.length > 0) {
-                        console.log("[CheckoutClient] Hard Reload: Liberating selection and redirecting", numbers);
+                // State reset
+                setSelectedNumbers([]);
 
-                        // Liberate on backend (best effort, non-blocking background task)
-                        fetch('/api/tickets/release', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
-                        }).catch(err => console.error("[CheckoutClient] Release failed:", err));
+                // All persistence cleanup
+                localStorage.removeItem('yvossoeee_selectedNumbers');
+                localStorage.removeItem('yvossoeee_sessionId');
+                localStorage.removeItem('selectedNumbers'); // Legacy
+                localStorage.removeItem('selectedTickets'); // Legacy
+                localStorage.removeItem('ticket-store');    // Legacy
+                sessionStorage.removeItem('selectedNumbers'); // Legacy
+                sessionStorage.removeItem(BRIDGE_KEY); // Bridge
 
-                        // Go home immediately
-                        router.replace('/');
-                        return;
-                    }
-                } catch (e) {
-                    console.error("Error processing abandoned selection on mount", e);
+                if (savedNumbers && savedSessionId) {
+                    try {
+                        const numbers = JSON.parse(savedNumbers);
+                        if (Array.isArray(numbers) && numbers.length > 0) {
+                            fetch('/api/tickets/release', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
+                            }).catch(err => console.error("[CheckoutClient] Release failed:", err));
+                        }
+                    } catch (e) { }
                 }
-            }
 
-            // If we reload and have nothing, we still go home
-            router.replace('/');
-            return;
+                router.replace('/');
+                return;
+            }
         }
 
-        // 2. NORMAL NAVIGATION: Rehydrate if state exists
-        if (savedNumbers && savedSessionId) {
+        // 2. NORMAL NAVIGATION: Rehydrate primarily from Session Bridge
+        let numbersToSet: number[] = bridgeNums;
+        let sessionIdToSet: string = savedSessionId || '';
+
+        // Fallback for localStorage if bridge is empty but storage isn't (resilience)
+        if (numbersToSet.length === 0 && savedNumbers) {
             try {
-                const numbers = JSON.parse(savedNumbers);
-                if (Array.isArray(numbers) && numbers.length > 0) {
-                    setSelectedNumbers(numbers);
-                    setSessionId(savedSessionId);
-                } else {
-                    router.replace('/');
+                const parsed = JSON.parse(savedNumbers);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    numbersToSet = parsed;
                 }
-            } catch (e) {
-                console.error("Error rehydrating selection", e);
-                router.replace('/');
-            }
+            } catch (e) { }
+        }
+
+        if (numbersToSet.length > 0) {
+            setSelectedNumbers(numbersToSet);
+            setSessionId(sessionIdToSet);
         } else {
-            // No numbers? Go home.
+            console.warn("[CheckoutClient] No selection found, returning to home.");
+            sessionStorage.removeItem(BRIDGE_KEY); // Final cleanup of potential garbage
             router.replace('/');
         }
 
