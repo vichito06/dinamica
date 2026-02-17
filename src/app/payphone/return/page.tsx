@@ -16,7 +16,31 @@ function ReturnContent() {
     const [emailSent, setEmailSent] = useState(false);
     const [saleId, setSaleId] = useState<string | null>(null);
     const [isResending, setIsResending] = useState(false);
+    const [isRecovering, setIsRecovering] = useState(false);
     const [resendStatus, setResendStatus] = useState<string | null>(null);
+
+    const recoverTickets = async () => {
+        if (!saleId) return;
+        setIsRecovering(true);
+        try {
+            const res = await fetch('/api/sales/tickets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ saleId }),
+                cache: 'no-store'
+            });
+            const data = await res.json();
+            if (res.ok && data.ticketNumbers) {
+                setTicketNumbers(data.ticketNumbers);
+            } else {
+                setMessage(data.error || 'No se pudieron recuperar los tickets.');
+            }
+        } catch (e) {
+            setMessage('Error de conexión al recuperar tickets.');
+        } finally {
+            setIsRecovering(false);
+        }
+    };
 
     useEffect(() => {
         const id = searchParams.get('id');
@@ -37,21 +61,24 @@ function ReturnContent() {
                         'Content-Type': 'application/json',
                         'Cache-Control': 'no-store'
                     },
-                    body: JSON.stringify({ id, clientTransactionId: clientTxId }),
+                    body: JSON.stringify({ id, saleId: id, clientTransactionId: clientTxId }),
                     cache: 'no-store'
                 });
 
                 const data = await response.json();
 
-                // Store for debugging
-                localStorage.setItem("last_payphone_confirm", JSON.stringify(data));
-
                 if (response.ok && data.statusCode === 3) {
                     setStatus('success');
                     setSaleId(data.saleId);
-                    // Use numbers from API response immediately
-                    const nums = data.ticketNumbers || [];
-                    setTicketNumbers(nums);
+
+                    // Prioritize tickets from the API response
+                    if (data.ticketNumbers && Array.isArray(data.ticketNumbers) && data.ticketNumbers.length > 0) {
+                        setTicketNumbers(data.ticketNumbers);
+                    } else {
+                        // Keep it empty to trigger the "No se pudieron mostrar tus números automáticamente" block
+                        setTicketNumbers([]);
+                    }
+
                     setEmailSent(data.emailSent || false);
 
                     // Clear session/checkout data
@@ -104,14 +131,36 @@ function ReturnContent() {
                     {/* Ticket Display Grid */}
                     <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
                         <h3 className="text-white font-bold mb-4 uppercase tracking-wider text-xs opacity-50">Tus Números de la Suerte</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                            {ticketNumbers.map(num => (
-                                <div key={num} className="bg-white/10 border border-white/10 py-3 rounded-xl text-white font-mono font-bold text-lg shadow-inner text-center">
-                                    {num}
-                                </div>
-                            ))}
-                        </div>
-                        {ticketNumbers.length === 0 && <p className="text-white/40 italic text-sm">Registrando tus números...</p>}
+
+                        {ticketNumbers.length > 0 ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                                {ticketNumbers.map(num => (
+                                    <div key={num} className="bg-white/10 border border-white/10 py-3 rounded-xl text-white font-mono font-bold text-lg shadow-inner text-center">
+                                        {num}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="mt-4 p-4 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                                <p className="text-orange-400 text-sm font-medium mb-3">
+                                    Pago confirmado, pero no pudimos recuperar tus números automáticamente.
+                                </p>
+                                <button
+                                    onClick={recoverTickets}
+                                    disabled={isRecovering}
+                                    className="w-full py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-xs font-bold rounded-lg border border-orange-500/30 transition-all flex items-center justify-center gap-2"
+                                >
+                                    {isRecovering ? (
+                                        <>
+                                            <Loader2 className="w-3 h-3 animate-spin" />
+                                            Recuperando...
+                                        </>
+                                    ) : (
+                                        "Toca aquí para Recuperar Números"
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex flex-col gap-4 w-full mb-8">
@@ -124,7 +173,8 @@ function ReturnContent() {
                                         const res = await fetch('/api/sales/resend', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ saleId })
+                                            body: JSON.stringify({ saleId }),
+                                            cache: 'no-store'
                                         });
                                         const d = await res.json();
                                         if (res.ok) {

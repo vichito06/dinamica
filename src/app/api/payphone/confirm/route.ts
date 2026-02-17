@@ -10,10 +10,12 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { id, clientTransactionId } = body;
+        // Tolerance for both 'id' and 'saleId'
+        const { id, saleId: providedSaleId, clientTransactionId } = body;
+        const effectiveSaleId = providedSaleId || id;
 
-        if (!id || !clientTransactionId) {
-            return NextResponse.json({ error: 'Missing id or clientTransactionId' }, { status: 400 });
+        if (!effectiveSaleId || !clientTransactionId) {
+            return NextResponse.json({ error: 'Missing effectiveSaleId or clientTransactionId' }, { status: 400 });
         }
 
         const sale = await prisma.sale.findUnique({
@@ -31,13 +33,43 @@ export async function POST(req: Request) {
 
         // Idempotency: Si ya está pagada, retornar ok + tickets sin reprocesar
         if (sale.status === SaleStatus.PAID) {
+            const pad4 = (num: number | string) => String(num).padStart(4, '0');
+
+            // 0) Intentar snapshot guardado en Sale
+            let finalTickets: string[] = (sale as any).ticketNumbers || [];
+
+            // 1) Si no hay snapshot, reconstruir desde ración de Tickets (SOLD)
+            if (finalTickets.length === 0) {
+                const tickets = await prisma.ticket.findMany({
+                    where: { saleId: sale.id, status: TicketStatus.SOLD },
+                    orderBy: { number: 'asc' }
+                });
+                finalTickets = tickets.map(t => pad4(t.number));
+
+                // Opcional: Re-snapshot si estaba vacío para agilizar futuros hits
+                if (finalTickets.length > 0) {
+                    await prisma.sale.update({
+                        where: { id: sale.id },
+                        data: { ticketNumbers: finalTickets }
+                    });
+                }
+            } else {
+                // Asegurar formato pad4 y orden
+                finalTickets = finalTickets.map((n: string) => pad4(n)).sort();
+            }
+
             return NextResponse.json({
                 ok: true,
                 alreadyPaid: true,
                 statusCode: 3,
                 saleId: sale.id,
-                ticketNumbers: sale.tickets.map(t => t.number.toString().padStart(4, '0')),
-                emailSent: true // Assume sent if already paid
+                ticketNumbers: finalTickets,
+                emailSent: true
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-store, max-age=0'
+                }
             });
         }
 
@@ -135,12 +167,22 @@ export async function POST(req: Request) {
             console.warn(`[PayPhone Confirm] Sale ${sale.id} rejected/canceled (ST:${data.statusCode})`);
         }
 
+        // Final response calculation for NEW payments
+        let finalResponseTickets = ticketNumbers; // use local if we just processed it
+        if (isPaid && finalResponseTickets.length === 0) {
+            const recoveryTickets = await prisma.ticket.findMany({
+                where: { saleId: sale.id, status: TicketStatus.SOLD },
+                orderBy: { number: 'asc' }
+            });
+            finalResponseTickets = recoveryTickets.map(t => String(t.number).padStart(4, '0'));
+        }
+
         return new NextResponse(JSON.stringify({
             ok: true,
             status: data.status,
             statusCode: data.statusCode,
             saleId: sale.id,
-            ticketNumbers: isPaid ? ticketNumbers : [],
+            ticketNumbers: isPaid ? finalResponseTickets : [],
             emailSent: emailSent
         }), {
             status: 200,
