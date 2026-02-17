@@ -30,18 +30,24 @@ export default function NumberSelector() {
 
         // 1. HARD RESET: Clear selection ONLY on actual page reload (F5)
         if (isHardReload()) {
-            console.log("[NumberSelector] Hard Reload detected: Clearing state zero");
+            const BRIDGE_KEY = "checkout:selectedTickets";
+            const hasStored = saved || sessionId || sessionStorage.getItem(BRIDGE_KEY);
 
-            // Always reset local state to empty
-            setSelectedNumbers([]);
+            if (hasStored) {
+                console.log("[NumberSelector] Hard Reload: Clearing state zero");
 
-            // Remove from storage instantly to prevent rehydration or surviving double-renders
-            localStorage.removeItem('yvossoeee_selectedNumbers');
-            localStorage.removeItem('yvossoeee_sessionId');
-            localStorage.removeItem('selectedNumbers'); // Legacy
-            localStorage.removeItem('selectedTickets'); // Legacy
-            localStorage.removeItem('ticket-store');    // Legacy
-            sessionStorage.removeItem('selectedNumbers'); // Legacy
+                // Reset local state
+                setSelectedNumbers([]);
+
+                // Clear storage
+                localStorage.removeItem('yvossoeee_selectedNumbers');
+                localStorage.removeItem('yvossoeee_sessionId');
+                localStorage.removeItem('selectedNumbers'); // Legacy
+                localStorage.removeItem('selectedTickets'); // Legacy
+                localStorage.removeItem('ticket-store');    // Legacy
+                sessionStorage.removeItem('selectedNumbers'); // Legacy
+                sessionStorage.removeItem(BRIDGE_KEY); // Bridge
+            }
 
             if (saved && sessionId) {
                 try {
@@ -184,13 +190,18 @@ export default function NumberSelector() {
             // Save to sessionStorage bridge for SPA navigation (pure array as requested)
             sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(nums));
 
-            // Ensure sessionId exists in localStorage
-            let sessionId = localStorage.getItem('yvossoeee_sessionId');
+            // Ensure sessionId exists in sessionStorage (stable for the tab session as requested)
+            let sessionId = sessionStorage.getItem('yvossoeee_sessionId');
             if (!sessionId) {
-                sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
-                    ? crypto.randomUUID()
-                    : Math.random().toString(36).substring(2);
-                localStorage.setItem('yvossoeee_sessionId', sessionId);
+                // Check localStorage for continuity if they just navigated in
+                sessionId = localStorage.getItem('yvossoeee_sessionId');
+                if (!sessionId) {
+                    sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+                        ? crypto.randomUUID()
+                        : Math.random().toString(36).substring(2);
+                    localStorage.setItem('yvossoeee_sessionId', sessionId);
+                }
+                sessionStorage.setItem('yvossoeee_sessionId', sessionId);
             }
 
             // Also keep in localStorage for resilience (will be cleared on F5)

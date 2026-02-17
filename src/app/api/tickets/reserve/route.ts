@@ -17,7 +17,8 @@ export async function POST(request: Request) {
         } catch (e) { }
 
         const body = await request.json();
-        const { tickets, sessionId } = body;
+        const { ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, sessionId } = body;
+        const tickets = bodyTicketNumbers || bodyTickets;
 
         // 1. Validation & Sanitization
         if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {

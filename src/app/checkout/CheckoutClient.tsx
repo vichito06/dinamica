@@ -58,8 +58,10 @@ export default function CheckoutClient() {
         paymentMethod: 'payphone'
     });
     const [isReserving, setIsReserving] = useState(false);
+    const [reserveError, setReserveError] = useState<string | null>(null);
     const searchParams = useSearchParams();
     const hasReleasedOnMount = useRef(false);
+    const [isHydrated, setIsHydrated] = useState(false);
 
     // Debug Mode Logic: dev mode OR ?debug=1
     // (Explicitly hide if ?debug=0)
@@ -71,11 +73,10 @@ export default function CheckoutClient() {
         hasReleasedOnMount.current = true;
 
         const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
-        const savedSessionId = localStorage.getItem('yvossoeee_sessionId');
+        const savedSessionId = sessionStorage.getItem('yvossoeee_sessionId') || localStorage.getItem('yvossoeee_sessionId');
         const bridgeNums = readBridge();
 
         // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5) 
-        // AND only if there's something to clean up (as requested)
         if (isHardReload()) {
             const hasStoredSelection = bridgeNums.length > 0 || savedNumbers;
 
@@ -112,7 +113,10 @@ export default function CheckoutClient() {
             }
         }
 
-        // 2. NORMAL NAVIGATION: Rehydrate primarily from Session Bridge
+        // 2. Hydration
+        setIsHydrated(true);
+
+        // 3. NORMAL NAVIGATION: Rehydrate and Reserve
         let numbersToSet: number[] = bridgeNums;
         let sessionIdToSet: string = savedSessionId || '';
 
@@ -129,9 +133,37 @@ export default function CheckoutClient() {
         if (numbersToSet.length > 0) {
             setSelectedNumbers(numbersToSet);
             setSessionId(sessionIdToSet);
+
+            // 4. RESERVE ON BACKEND (STRICTLY ONCE ON MOUNT)
+            setIsReserving(true);
+            setReserveError(null);
+
+            fetch('/api/tickets/reserve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ticketNumbers: numbersToSet,
+                    sessionId: sessionIdToSet
+                })
+            })
+                .then(async (res) => {
+                    const data = await res.json();
+                    if (!res.ok) {
+                        throw new Error(data.error || 'No se pudieron reservar los números.');
+                    }
+                    return data;
+                })
+                .catch((err) => {
+                    console.error("[CheckoutClient] Reservation failed:", err);
+                    setReserveError(err.message || 'Error al reservar los tickets. Intenta de nuevo.');
+                })
+                .finally(() => {
+                    setIsReserving(false);
+                });
+
         } else {
             console.warn("[CheckoutClient] No selection found, returning to home.");
-            sessionStorage.removeItem(BRIDGE_KEY); // Final cleanup of potential garbage
+            sessionStorage.removeItem(BRIDGE_KEY);
             router.replace('/');
         }
 
@@ -177,7 +209,7 @@ export default function CheckoutClient() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    tickets: selectedNumbers.map((t: number) => t.toString().padStart(4, '0')),
+                    ticketNumbers: selectedNumbers.map((t: number) => t.toString().padStart(4, '0')),
                     sessionId
                 })
             });
@@ -459,6 +491,34 @@ export default function CheckoutClient() {
         );
     }
 
+    if (!isHydrated) {
+        return (
+            <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center">
+                <RefreshCw className="w-12 h-12 text-white animate-spin opacity-20" />
+            </div>
+        );
+    }
+
+    if (reserveError) {
+        return (
+            <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center p-4">
+                <div className="glass-strong p-8 rounded-2xl max-w-md w-full text-center">
+                    <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertCircle className="w-8 h-8 text-red-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Error de Reserva</h2>
+                    <p className="text-white/70 mb-8">{reserveError}</p>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="w-full py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg transition-all hover:scale-[1.02]"
+                    >
+                        Volver al Inicio
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!selectedNumbers.length) {
         return (
             <div className="min-h-screen textured-bg grid-pattern flex items-center justify-center">
@@ -584,6 +644,7 @@ export default function CheckoutClient() {
                                     setData={setPersonalData}
                                     onSubmit={handlePersonalDataSubmit}
                                     loading={isReserving}
+                                    selectedNumbers={selectedNumbers}
                                 />
                             )}
 
@@ -679,7 +740,7 @@ function StepIndicator({ number, title, active, completed }: any) {
 }
 
 // Personal Data Form
-function PersonalDataForm({ data, setData, onSubmit, loading }: any) {
+function PersonalDataForm({ data, setData, onSubmit, loading, selectedNumbers }: any) {
     const router = useRouter();
     const isEcuador = data.country === 'Ecuador';
 
@@ -845,7 +906,7 @@ function PersonalDataForm({ data, setData, onSubmit, loading }: any) {
                     {/* Back button removed from here */}
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !selectedNumbers || selectedNumbers.length === 0}
                         className="flex-1 py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg hover:shadow-white/30 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {loading ? (

@@ -16,7 +16,8 @@ export async function POST(request: Request) {
         } catch (e) { }
 
         const body = await request.json();
-        const { personalData, tickets, total, sessionId } = body;
+        const { personalData, ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, total, sessionId } = body;
+        const tickets = bodyTicketNumbers || bodyTickets;
 
         // 1. Validation & sanitization
         if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
