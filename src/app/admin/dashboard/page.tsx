@@ -35,12 +35,13 @@ export default function AdminDashboard() {
 
     const handleLogout = async () => {
         try {
-            await fetch('/api/admin/logout', { method: 'POST' });
-            router.push('/admin');
-            router.refresh();
-        } catch (e) {
-            console.error(e);
-            router.push('/admin');
+            await fetch('/api/admin/logout', {
+                method: 'POST',
+                credentials: 'include'
+            });
+        } finally {
+            // Regresar a la raíz de admin (donde ahora está el login)
+            window.location.href = '/admin';
         }
     };
 
@@ -132,111 +133,131 @@ function TabButton({ active, onClick, icon, label }: any) {
     );
 }
 
+import { StatCard } from '../../../components/admin/StatCard';
+
 function DashboardView() {
-    const [analytics, setAnalytics] = useState({ pageviews: 0, unique: 0 });
+    const [stats, setStats] = useState({
+        visitsToday: 0,
+        totalAmount: 0,
+        ticketsSold: 0,
+        buyers: 0,
+        totalTickets: 99999,
+        ticketsAvailable: 99999
+    });
     const [sales, setSales] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch analytics
-        fetch('/api/analytics/summary')
+        // Fetch real-time stats
+        fetch('/api/admin/stats')
             .then(res => res.json())
-            .then(data => data.today && setAnalytics(data.today))
-            .catch(err => console.error(err));
+            .then(data => data.success !== false && setStats(data))
+            .catch(err => console.error('Stats error:', err));
 
-        // Fetch sales data
+        // Fetch recent sales for the table
         fetch('/api/sales')
             .then(res => res.json())
-            .then(data => {
-                if (Array.isArray(data)) {
-                    setSales(data);
-                } else {
-                    console.error('Expected sales array but got:', data);
-                    setSales([]);
-                }
-            })
-            .catch(err => {
-                console.error('Error fetching sales:', err);
-                setSales([]);
-            });
+            .then(data => setSales(Array.isArray(data) ? data : []))
+            .catch(err => console.error('Sales error:', err))
+            .finally(() => setLoading(false));
     }, []);
 
-    // Derived Stats
-    const totalVendido = sales.reduce((acc, curr) => acc + curr.total, 0);
-    const totalTickets = sales.reduce((acc, curr) => acc + (curr.tickets ? curr.tickets.length : 0), 0);
-    const uniqueBuyers = new Set(sales.map(s => s.customerId)).size;
-
-    // Recent Tickets (Top 20 Flat list)
-    const allTickets = sales.flatMap(s => s.tickets || []);
-    const recentTickets = allTickets.slice(0, 20); // Last 20 sold
+    // Últimos tickets vendidos (aplanar de las ventas recientes)
+    const recentTickets = sales.flatMap(s => s.tickets || []).slice(0, 20);
 
     return (
-        <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[18px]">
-                <StatsCard
+        <div className="space-y-8 animate-in fade-in duration-500">
+            {/* Stats Cards Grid - Responsive: 1 col mobile, 2 col tablet, 4 col desktop */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <StatCard
                     title="Visitas Hoy"
-                    value={(analytics.unique ?? 0).toLocaleString()}
-                    icon={<Eye className="w-6 h-6 text-white" />}
-                    gradient="bg-pink-600"
-                    trend="Únicos"
+                    value={stats.visitsToday.toLocaleString()}
+                    sub="Tráfico del día"
+                    icon={<Eye className="w-5 h-5" />}
                 />
-                <StatsCard
+                <StatCard
                     title="Total Vendido"
-                    value={`$${(totalVendido ?? 0)}`}
-                    icon={<DollarSign className="w-6 h-6 text-white" />}
-                    gradient="bg-emerald-600"
+                    value={`$${stats.totalAmount.toLocaleString()}`}
+                    sub="Pagos confirmados"
+                    icon={<DollarSign className="w-5 h-5 text-emerald-400" />}
                 />
-                <StatsCard
+                <StatCard
                     title="Tickets Vendidos"
-                    value={(totalTickets ?? 0).toString()}
-                    icon={<TrendingUp className="w-6 h-6 text-white" />}
-                    gradient="bg-blue-600"
+                    value={stats.ticketsSold.toLocaleString()}
+                    sub={`${stats.ticketsSold} de ${stats.totalTickets}`}
+                    icon={<TrendingUp className="w-5 h-5 text-blue-400" />}
                 />
-                <StatsCard
-                    title="Compradores"
-                    value={(uniqueBuyers ?? 0).toString()}
-                    icon={<Users className="w-6 h-6 text-white" />}
-                    gradient="bg-purple-600"
+                <StatCard
+                    title="Tickets Disponibles"
+                    value={stats.ticketsAvailable.toLocaleString()}
+                    sub={`${stats.ticketsAvailable} de ${stats.totalTickets}`}
+                    icon={<Hash className="w-5 h-5 text-purple-400" />}
                 />
             </div>
 
-            {/* Charts Section */}
-            <div className="grid lg:grid-cols-2 gap-[18px]">
-                {/* Recent Sales */}
-                <div className="glass-strong p-6 rounded-2xl flex flex-col h-full">
+            {/* Layout Secundario: Ventas y Tickets */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {/* Ventas Recientes */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-xl">
                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-xl font-bold text-white">Ventas Recientes</h3>
-                        <button className="text-xs px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 transition-colors">Ver todas</button>
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <DollarSign className="w-5 h-5 text-emerald-500" />
+                            Ventas Recientes
+                        </h3>
+                        <button className="text-sm text-white/50 hover:text-white transition-colors">Ver todas</button>
                     </div>
-                    <div className="space-y-1 flex-1 overflow-y-auto pr-2 max-h-[400px]">
-                        {sales.slice(0, 10).map((sale, i) => (
-                            <div key={i} className="grid grid-cols-12 gap-4 p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-colors items-center">
-                                <div className="col-span-4">
-                                    <div className="text-white font-medium">#{sale.id}</div>
-                                    <div className="text-white/40 text-xs">{new Date(sale.date).toLocaleTimeString()}</div>
+
+                    <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                        {sales.slice(0, 8).map((sale, i) => (
+                            <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-all group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center border border-white/10">
+                                        <span className="text-white font-bold">#{sale.id.slice(-3)}</span>
+                                    </div>
+                                    <div>
+                                        <div className="text-white font-medium truncate max-w-[150px]">{sale.customer?.fullName || sale.client}</div>
+                                        <div className="text-white/40 text-xs">{new Date(sale.date).toLocaleTimeString()}</div>
+                                    </div>
                                 </div>
-                                <div className="col-span-5">
-                                    <div className="text-white/80 text-sm truncate">{sale.customer?.fullName || sale.client}</div>
-                                </div>
-                                <div className="col-span-3 text-right">
+                                <div className="text-right">
                                     <div className="text-white font-bold">${sale.total}</div>
+                                    <div className="text-emerald-400 text-[10px] font-bold uppercase">Pagado</div>
                                 </div>
                             </div>
                         ))}
-                        {sales.length === 0 && <p className="text-white/50 text-center py-4">No hay ventas recientes</p>}
+                        {sales.length === 0 && !loading && (
+                            <div className="text-center py-10 text-white/40">No hay ventas recientes</div>
+                        )}
+                        {loading && (
+                            <div className="text-center py-10 text-white/40">Cargando...</div>
+                        )}
                     </div>
                 </div>
 
-                {/* Latest Tickets Sold (Replacement for Most Sold) */}
-                <div className="glass-strong p-6 rounded-2xl flex flex-col h-full">
-                    <h3 className="text-xl font-bold text-white mb-6">Últimos Tickets Vendidos</h3>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto pr-2">
+                {/* Últimos Tickets Vendidos */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Sparkles className="w-5 h-5 text-yellow-500" />
+                            Últimos Tickets Vendidos
+                        </h3>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                         {recentTickets.map((ticket: string, i: number) => (
-                            <div key={i} className="p-2 bg-white/10 rounded-lg text-center border border-white/10">
-                                <span className="font-mono font-bold text-white text-sm">{ticket}</span>
-                            </div>
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: i * 0.05 }}
+                                className="p-3 bg-white/5 rounded-xl text-center border border-white/10 hover:border-white/30 transition-all font-mono font-bold text-white text-sm"
+                            >
+                                {ticket}
+                            </motion.div>
                         ))}
-                        {recentTickets.length === 0 && <p className="col-span-full text-white/50 text-center py-4">No hay tickets vendidos</p>}
+                        {recentTickets.length === 0 && !loading && (
+                            <div className="col-span-full text-center py-10 text-white/40">No hay tickets vendidos</div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1219,27 +1240,3 @@ function CustomersView() {
     );
 }
 
-function StatsCard({ title, value, icon, gradient, trend }: any) {
-    return (
-        <motion.div
-            whileHover={{ y: -5 }}
-            className="glass-strong p-6 rounded-2xl relative overflow-hidden flex flex-col justify-between min-h-[140px] border border-white/10"
-        >
-            <div className="flex justify-between items-start mb-4">
-                <div className={`p-3 rounded-xl ${gradient} bg-opacity-80 text-white shadow-lg`}>
-                    {icon}
-                </div>
-                {trend && (
-                    <div className="flex items-center gap-1 bg-green-500/20 px-2 py-1 rounded-lg">
-                        <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[6px] border-b-green-400"></div>
-                        <span className="text-green-400 text-xs font-bold">{trend}</span>
-                    </div>
-                )}
-            </div>
-            <div>
-                <div className="text-white/60 text-sm font-medium mb-1">{title}</div>
-                <div className="text-3xl font-bold text-white tracking-tight">{value}</div>
-            </div>
-        </motion.div>
-    );
-}

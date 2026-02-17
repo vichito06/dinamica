@@ -7,9 +7,10 @@ import Image from 'next/image';
 interface HeroProps {
     raffleTitle?: string;
     prizes?: { title: string, amount: string }[];
+    onStartBuying?: () => void;
 }
 
-export default function Hero({ raffleTitle, prizes }: HeroProps) {
+export default function Hero({ raffleTitle, prizes, onStartBuying }: HeroProps) {
     const displayPrizes = (prizes && prizes.length > 0) ? prizes : [
         { title: "1er Premio", amount: "$1000" },
         { title: "2do Premio", amount: "$300" },
@@ -122,7 +123,7 @@ export default function Hero({ raffleTitle, prizes }: HeroProps) {
                             transition={{ delay: 1.2, type: 'spring', stiffness: 200 }}
                         >
                             <button
-                                onClick={() => document.getElementById('number-selector')?.scrollIntoView({ behavior: 'smooth' })}
+                                onClick={() => onStartBuying?.()}
                                 className="group relative px-12 py-5 bg-white text-black text-xl font-bold rounded-full shadow-2xl hover:shadow-white/30 transition-all duration-300 hover:scale-110 border-2 border-white/50"
                             >
                                 <span className="relative z-10 flex items-center gap-3">
@@ -134,8 +135,6 @@ export default function Hero({ raffleTitle, prizes }: HeroProps) {
                     </div>
                 </motion.div>
             </div>
-
-
         </section>
     );
 }

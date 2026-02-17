@@ -2,18 +2,18 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, AlertCircle } from 'lucide-react';
+import { Lock, AlertCircle, Loader2 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 
-export default function AdminLoginPage() {
+export default function AdminPage() {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const router = useRouter();
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (loading) return;
+
         setLoading(true);
         setError('');
 
@@ -24,11 +24,11 @@ export default function AdminLoginPage() {
                 body: JSON.stringify({ password })
             });
 
-            if (res.ok) {
-                router.push('/admin/dashboard');
-                router.refresh(); // Refresh to update middleware state
+            const data = await res.json();
+            if (res.ok && data.success) {
+                // Ir al dashboard después del login
+                window.location.href = '/admin/dashboard';
             } else {
-                const data = await res.json();
                 setError(data.error || 'Autenticación fallida');
             }
         } catch (err) {
@@ -47,7 +47,7 @@ export default function AdminLoginPage() {
             >
                 <div className="flex justify-center mb-6">
                     <div className="relative w-20 h-20">
-                        <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+                        <Image src="/logo.png" alt="Logo" fill className="object-contain" priority />
                     </div>
                 </div>
 
@@ -63,12 +63,14 @@ export default function AdminLoginPage() {
                         <div className="relative">
                             <input
                                 type="password"
+                                name="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder="••••••••••••"
-                                className="w-full input-field pl-4 pr-4 py-3 bg-black/40 border-white/10 focus:border-purple-500 transition-colors rounded-xl text-white"
+                                className="w-full input-field pl-4 pr-4 py-3 bg-black/40 border-white/10 focus:border-purple-500 transition-colors rounded-xl text-white outline-none"
                                 autoFocus
                                 disabled={loading}
+                                autoComplete="current-password"
                             />
                         </div>
                     </div>
@@ -86,12 +88,12 @@ export default function AdminLoginPage() {
 
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || !password.trim()}
                         className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2"
                     >
                         {loading ? (
                             <>
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <Loader2 className="w-4 h-4 animate-spin" />
                                 Verificando...
                             </>
                         ) : (

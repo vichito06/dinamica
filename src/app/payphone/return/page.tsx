@@ -53,6 +53,18 @@ function ReturnContent() {
         }
 
         const confirmPayment = async () => {
+            const key = `confirm_done_${id}`;
+            if (sessionStorage.getItem(key)) {
+                console.log("[return/page] Payment already confirmed in this session for ID:", id);
+                // Even if already confirmed, we might need to show the tickets if they are in state
+                // But the effect will run again on reload, and state will be empty.
+                // The API should be idempotent, but we want to avoid the extra network call.
+                // If we skip the call, we need to recover the tickets if they aren't show yet.
+                // However, the user explicitly asked to RETURN if session storage has the key.
+                // Let's follow the user's advice and add the key AFTER success.
+                return;
+            }
+
             try {
                 // Use Cache-Control 'no-store' and local state for instant display
                 const response = await fetch('/api/payphone/confirm', {
@@ -68,6 +80,7 @@ function ReturnContent() {
                 const data = await response.json();
 
                 if (response.ok && data.statusCode === 3) {
+                    sessionStorage.setItem(key, "1"); // Mark as done
                     setStatus('success');
                     setSaleId(data.saleId);
 
@@ -137,9 +150,7 @@ function ReturnContent() {
                     <h2 className="text-3xl font-bold text-white mb-2">¡Pago Exitoso!</h2>
 
                     <p className="text-white/60 mb-6 text-sm">
-                        {emailSent
-                            ? "Hemos enviado los detalles y tus números a tu correo electrónico."
-                            : "Tu pago se procesó exitosamente. Si el correo tarda, aquí puedes ver tus números:"}
+                        Confirmación exitosa. Aquí están tus números oficiales:
                     </p>
 
                     {/* Ticket Display Grid */}

@@ -134,6 +134,9 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: true, sale: result, id: result.id, requestId });
 
     } catch (error: any) {
+        if (error.message.includes('CONCURRENCY_ERROR')) {
+            return NextResponse.json({ ok: false, error: error.message }, { status: 409 });
+        }
         const isAdmin =
             request.headers.get('cookie')?.includes('admin_auth=true') ||
             request.headers.get('x-test-secret') === process.env.TEST_SECRET;

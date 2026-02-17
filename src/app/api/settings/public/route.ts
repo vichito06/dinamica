@@ -12,5 +12,9 @@ export async function GET() {
         contactText: settings.contactText,
         termsHtml: settings.termsHtml,
         privacyHtml: settings.privacyHtml
+    }, {
+        headers: {
+            'Cache-Control': 's-maxage=10, stale-while-revalidate=60'
+        }
     });
 }

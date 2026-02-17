@@ -5,7 +5,7 @@ export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // ✅ Endpoints que deben pasar SIEMPRE
-  if (pathname === "/api/admin/login") return NextResponse.next();
+  if (pathname === "/api/admin/login" || pathname === "/api/admin/logout") return NextResponse.next();
 
   // ✅ Login vive en /admin (NO bloquear)
   if (pathname === "/admin") return NextResponse.next();
