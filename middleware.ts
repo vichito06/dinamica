@@ -1,40 +1,31 @@
-```typescript
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const path = pathname.replace(/\/$/, ""); // Normalizar: sin barra al final
 
-  // ✅ Rutas Públicas de Admin (Login y Status)
-  const isPublicRoute = 
-    path === "/admin/login" || 
-    path === "/api/admin/login" || 
-    path === "/api/admin/me";
+  // ✅ Endpoints que deben pasar SIEMPRE
+  if (pathname === "/api/admin/login") return NextResponse.next();
 
-  if (isPublicRoute) {
-    return NextResponse.next();
-  }
+  // ✅ Login vive en /admin (NO bloquear)
+  if (pathname === "/admin") return NextResponse.next();
 
-  // ✅ Protege el área Admin
-  if (path === "/admin" || path.startsWith("/admin/") || path.startsWith("/api/admin")) {
-    const session = req.cookies.get("admin_session")?.value;
-    const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+  // ✅ Proteger todo lo demás dentro de /admin y /api/admin
+  if (pathname.startsWith("/admin/") || pathname.startsWith("/api/admin")) {
+    const cookie = req.cookies.get("admin_session")?.value;
 
-    const isAuthenticated = session && secret && session === secret;
-
-    if (!isAuthenticated) {
-      // API -> 401
-      if (path.startsWith("/api/")) {
+    if (!cookie) {
+      // API -> 401 JSON
+      if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           { success: false, error: "Unauthenticated" },
           { status: 401 }
         );
       }
-
-      // UI -> Redirigir a login
-      const loginUrl = new URL("/admin/login", req.url);
-      return NextResponse.redirect(loginUrl);
+      // Web -> redirige al login /admin
+      const url = req.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
     }
   }
 
@@ -42,6 +33,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin(.*)", "/api/admin(.*)"],
+  matcher: ["/admin/:path*", "/api/admin/:path*"],
 };
-```
