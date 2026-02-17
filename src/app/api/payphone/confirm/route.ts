@@ -32,37 +32,18 @@ export async function POST(req: Request) {
 
         // Idempotency: Si ya está pagada, retornar ok + tickets sin reprocesar
         if (sale.status === SaleStatus.PAID) {
-            const pad4 = (num: number | string) => String(num).padStart(4, '0');
+            const recovery = await prisma.$transaction(async (tx) => {
+                return await recoverTicketNumbers(tx, sale.id);
+            });
 
-            // 0) Intentar snapshot guardado en Sale
-            let finalTickets: string[] = (sale as any).ticketNumbers || [];
-
-            // 1) Si no hay snapshot, reconstruir desde ración de Tickets (SOLD)
-            if (finalTickets.length === 0) {
-                const tickets = await prisma.ticket.findMany({
-                    where: { saleId: sale.id, status: TicketStatus.SOLD },
-                    orderBy: { number: 'asc' }
-                });
-                finalTickets = tickets.map(t => pad4(t.number));
-
-                // Opcional: Re-snapshot si estaba vacío para agilizar futuros hits
-                if (finalTickets.length > 0) {
-                    await prisma.sale.update({
-                        where: { id: sale.id },
-                        data: { ticketNumbers: finalTickets }
-                    });
-                }
-            } else {
-                // Asegurar formato pad4 y orden
-                finalTickets = finalTickets.map((n: string) => pad4(n)).sort();
-            }
+            console.log(`[PayPhone Confirm] alreadyPaid=true saleId=${sale.id} source=${recovery.source} tickets=${recovery.numbers.length}`);
 
             return NextResponse.json({
                 ok: true,
                 alreadyPaid: true,
                 statusCode: 3,
                 saleId: sale.id,
-                ticketNumbers: finalTickets,
+                ticketNumbers: recovery.numbers,
                 emailSent: true
             }, {
                 headers: {
@@ -102,8 +83,15 @@ export async function POST(req: Request) {
         let emailSent = false;
 
         if (isPaid) {
-            await prisma.$transaction(async (tx) => {
-                // 1. Update Sale with payout info and ticket snapshot
+            const recovery = await prisma.$transaction(async (tx) => {
+                // [LAW 1] Strict Ticket Existence Validation
+                const rec = await recoverTicketNumbers(tx, sale.id);
+
+                if (rec.numbers.length === 0) {
+                    throw new Error("GHOST_SALE_ERROR: No se encontraron tickets (RESERVED/SOLD) para esta venta. Abortando confirmación.");
+                }
+
+                // 1. Update Sale with payout info and ticket snapshot from recovery
                 await tx.sale.update({
                     where: { id: sale.id },
                     data: {
@@ -111,15 +99,16 @@ export async function POST(req: Request) {
                         confirmedAt: new Date(),
                         payphoneStatusCode: data.statusCode,
                         payphoneAuthorizationCode: String(data.authorizationCode || ''),
-                        ticketNumbers: ticketNumbers // Snapshot
+                        ticketNumbers: rec.numbers // Snapshot
                     }
                 });
 
-                // 2. Mark as SOLD (only if currently RESERVED)
+                // 2. Ensure all are SOLD (recovery.repaired already did it for RESERVED, but let's be safe)
+                const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
                 await tx.ticket.updateMany({
                     where: {
                         saleId: sale.id,
-                        status: TicketStatus.RESERVED
+                        status: reservedStatus
                     },
                     data: {
                         status: TicketStatus.SOLD,
@@ -127,8 +116,12 @@ export async function POST(req: Request) {
                         reservedUntil: null
                     }
                 });
+
+                return rec;
             });
-            console.log(`[PayPhone Confirm] Sale ${sale.id} confirmed as PAID`);
+
+            ticketNumbers = recovery.numbers;
+            console.log(`[PayPhone Confirm] Sale ${sale.id} confirmed as PAID. Tickets: ${ticketNumbers.length}`);
 
             // Intentar enviar correo con manejo de rate limit
             try {

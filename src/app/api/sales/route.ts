@@ -40,9 +40,10 @@ export async function POST(request: Request) {
             });
 
             const now = new Date();
+            const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
             const unavailable = existingTickets.filter(t =>
                 t.status === TicketStatus.SOLD ||
-                (t.status === TicketStatus.RESERVED &&
+                (t.status === reservedStatus &&
                     t.reservedUntil && t.reservedUntil > now &&
                     t.sessionId !== sessionId)
             );
@@ -90,8 +91,9 @@ export async function POST(request: Request) {
             const missingNumbers = ticketNumbers.filter((num: number) => !existingNumbers.includes(num));
             const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
 
+            let updatedCount = 0;
             if (existingNumbers.length > 0) {
-                await tx.ticket.updateMany({
+                const updateBatch = await tx.ticket.updateMany({
                     where: { number: { in: existingNumbers } },
                     data: {
                         status: TicketStatus.RESERVED,
@@ -99,21 +101,12 @@ export async function POST(request: Request) {
                         reservedUntil: expiresAt
                     }
                 });
-
-                // Double check that we actually updated the expected amount of tickets
-                // This prevents race conditions where tickets might have changed status 
-                // between our check and the update
-                const updatedCount = await tx.ticket.count({
-                    where: { saleId: sale.id }
-                });
-
-                if (updatedCount < ticketNumbers.length) {
-                    throw new Error(`CONCURRENCY_ERROR: Solo se pudieron reservar ${updatedCount} de ${ticketNumbers.length} tickets.`);
-                }
+                updatedCount = updateBatch.count;
             }
 
+            let createdCount = 0;
             if (missingNumbers.length > 0) {
-                await tx.ticket.createMany({
+                const createBatch = await tx.ticket.createMany({
                     data: missingNumbers.map((num: number) => ({
                         number: num,
                         status: TicketStatus.RESERVED,
@@ -122,6 +115,12 @@ export async function POST(request: Request) {
                         reservedUntil: expiresAt,
                     }))
                 });
+                createdCount = createBatch.count;
+            }
+
+            // [LAW 2] Strict Batch Size Validation
+            if (updatedCount + createdCount !== ticketNumbers.length) {
+                throw new Error(`CONCURRENCY_ERROR: Solo se pudieron procesar ${updatedCount + createdCount} de ${ticketNumbers.length} tickets.`);
             }
 
             return sale;
