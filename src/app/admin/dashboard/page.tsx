@@ -671,6 +671,27 @@ function SettingsView() {
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
+    const [resetting, setResetting] = useState(false);
+
+    const handleReset = async () => {
+        setResetting(true);
+        try {
+            const res = await fetch('/api/admin/reset', { method: 'POST' });
+            if (res.ok) {
+                alert('Rifa restablecida con éxito. Todos los números están disponibles.');
+                setShowResetConfirm(false);
+                window.location.reload();
+            } else {
+                alert('Error al restablecer');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error de conexión');
+        } finally {
+            setResetting(false);
+        }
+    };
 
     useEffect(() => {
         fetch('/api/settings')
@@ -851,6 +872,47 @@ function SettingsView() {
                             placeholder="HTML o Texto plano..."
                         />
                     </div>
+                </div>
+            </div>
+
+            <div className="glass-strong p-6 rounded-2xl border border-red-500/20 bg-red-500/5">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h3 className="text-xl font-bold text-red-500 mb-1">Zona de Peligro</h3>
+                        <p className="text-white/60 text-sm">Estas acciones son irreversibles. Ten cuidado.</p>
+                    </div>
+                </div>
+
+                <div className="mt-6 p-4 border border-red-500/20 rounded-xl bg-black/20 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div>
+                        <div className="text-white font-bold">Restablecer Tickets</div>
+                        <p className="text-white/40 text-xs text-balance">Vuelve a poner todos los números (0001-9999) como disponibles para iniciar un nuevo sorteo.</p>
+                    </div>
+
+                    {!showResetConfirm ? (
+                        <button
+                            onClick={() => setShowResetConfirm(true)}
+                            className="px-4 py-2 bg-red-600/20 text-red-500 border border-red-500/30 rounded-lg hover:bg-red-600/30 transition-colors font-bold text-sm"
+                        >
+                            Restablecer Rifas
+                        </button>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleReset}
+                                disabled={resetting}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-bold text-sm shadow-lg shadow-red-600/20"
+                            >
+                                {resetting ? 'Procesando...' : 'Sí, confirmar reset'}
+                            </button>
+                            <button
+                                onClick={() => setShowResetConfirm(false)}
+                                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
