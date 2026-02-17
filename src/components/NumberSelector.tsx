@@ -25,37 +25,29 @@ export default function NumberSelector() {
         if (hasReleasedOnMount.current) return;
         hasReleasedOnMount.current = true;
 
-        const saved = localStorage.getItem('yvossoeee_selectedNumbers');
-        const sessionId = localStorage.getItem('yvossoeee_sessionId');
+        const BRIDGE_KEY = "checkout:selectedTickets";
+        const SESSION_ID_KEY = "yvossoeee_sessionId";
 
         // 1. HARD RESET: Clear selection ONLY on actual page reload (F5) flag
         if (wasHardReload()) {
-            const BRIDGE_KEY = "checkout:selectedTickets";
-            const hasStored = saved || sessionId || sessionStorage.getItem(BRIDGE_KEY);
+            const saved = sessionStorage.getItem(BRIDGE_KEY);
+            const sessionId = sessionStorage.getItem(SESSION_ID_KEY);
 
-            if (hasStored) {
-                console.log("[NumberSelector] Hard Reload: Clearing state zero");
+            console.log("[NumberSelector] Hard Reload detected: Clearing state zero");
 
-                // Reset local state
-                setSelectedNumbers([]);
+            // Reset local state
+            setSelectedNumbers([]);
 
-                // Clear storage
-                localStorage.removeItem('yvossoeee_selectedNumbers');
-                localStorage.removeItem('yvossoeee_sessionId');
-                localStorage.removeItem('selectedNumbers'); // Legacy
-                localStorage.removeItem('selectedTickets'); // Legacy
-                localStorage.removeItem('ticket-store');    // Legacy
-                sessionStorage.removeItem('selectedNumbers'); // Legacy
-                sessionStorage.removeItem(BRIDGE_KEY); // Bridge
-            }
+            // Clear storage (sessionStorage and any legacy localStorage)
+            sessionStorage.removeItem(BRIDGE_KEY);
+            localStorage.removeItem('yvossoeee_selectedNumbers'); // Legacy cleanup
+            localStorage.removeItem('selectedNumbers');          // Legacy cleanup
 
             if (saved && sessionId) {
                 try {
                     const numbers = JSON.parse(saved);
                     if (Array.isArray(numbers) && numbers.length > 0) {
                         console.log("[NumberSelector] Hard Reset: Releasing abandoned selection:", numbers);
-
-                        // Trigger backend liberation (best effort, non-blocking)
                         fetch('/api/tickets/release', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -67,7 +59,8 @@ export default function NumberSelector() {
                 }
             }
         } else {
-            // 2. NORMAL NAVIGATION: Rehydrate if state exists
+            // 2. NORMAL NAVIGATION: Rehydrate if state exists in sessionStorage
+            const saved = sessionStorage.getItem(BRIDGE_KEY);
             if (saved) {
                 try {
                     const numbers = JSON.parse(saved);
@@ -80,10 +73,19 @@ export default function NumberSelector() {
             }
         }
 
-        // 3. Page Close/Unload Listener (Best Effort)
+        // 3. Ensure sessionId exists in sessionStorage (stable for the tab as requested)
+        let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
+        if (!sessionId) {
+            sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : Math.random().toString(36).substring(2);
+            sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+        }
+
+        // 4. Page Close/Unload Listener (Best Effort cleanup)
         const handleBeforeUnload = () => {
-            const currentSaved = localStorage.getItem('yvossoeee_selectedNumbers');
-            const currentSession = localStorage.getItem('yvossoeee_sessionId');
+            const currentSaved = sessionStorage.getItem(BRIDGE_KEY);
+            const currentSession = sessionStorage.getItem(SESSION_ID_KEY);
             if (currentSaved && currentSession) {
                 const blob = new Blob([JSON.stringify({
                     ticketNumbers: JSON.parse(currentSaved),
@@ -96,8 +98,8 @@ export default function NumberSelector() {
         window.addEventListener('beforeunload', handleBeforeUnload);
         window.addEventListener('pagehide', handleBeforeUnload);
 
-        // 4. Fetch sold tickets
-        fetch('/api/tickets/sold')
+        // 5. Fetch sold tickets
+        fetch('/api/tickets/sold', { cache: 'no-store' })
             .then(res => res.json())
             .then(data => setSoldTickets(data))
             .catch(err => console.error(err));
@@ -119,59 +121,69 @@ export default function NumberSelector() {
         return () => clearInterval(interval);
     }, []);
 
-    const generateUniqueRandomNumber = (existingNumbers: number[]): number => {
-        let attempts = 0;
-        let randomNum: number;
 
-        do {
-            randomNum = Math.floor(Math.random() * MAX_NUMBER) + MIN_NUMBER;
-            const randomStr = randomNum.toString().padStart(4, '0');
-            attempts++;
-            if (attempts > 10000) {
-                throw new Error('No se pueden generar más números únicos');
-            }
-        } while (existingNumbers.includes(randomNum) || soldTickets.includes(randomNum.toString().padStart(4, '0')));
-
-        return randomNum;
-    };
-
-    const generateMultipleNumbers = () => {
+    const generateMultipleNumbers = async () => {
         setIsGenerating(true);
-        setTimeout(() => {
-            try {
-                const newNumbers = [...selectedNumbers];
+        const sessionId = sessionStorage.getItem('yvossoeee_sessionId');
 
-                for (let i = 0; i < selectedQuantity; i++) {
-                    const newNum = generateUniqueRandomNumber(newNumbers);
-                    newNumbers.push(newNum);
-                }
+        try {
+            const res = await fetch('/api/tickets/pick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ count: selectedQuantity, sessionId })
+            });
 
-                setSelectedNumbers(newNumbers);
-                localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newNumbers));
-            } catch (error) {
-                alert('No se pudieron generar todos los números solicitados (posiblemente agotados).');
-            }
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al generar números.');
+
+            const pickedNumbers = data.ticketNumbers.map((n: string) => parseInt(n, 10));
+            const newSelection = [...selectedNumbers, ...pickedNumbers];
+
+            setSelectedNumbers(newSelection);
+            sessionStorage.setItem('checkout:selectedTickets', JSON.stringify(newSelection));
+
+        } catch (error: any) {
+            console.error("[NumberSelector] Pick failed:", error);
+            alert(error.message || 'No se pudieron generar los números. Intenta de nuevo.');
+        } finally {
             setIsGenerating(false);
-        }, 800);
+        }
     };
 
-    const addManualNumber = () => {
+    const addManualNumber = async () => {
         const num = parseInt(manualNumber);
         const numStr = num.toString().padStart(4, '0');
+        const sessionId = sessionStorage.getItem('yvossoeee_sessionId');
 
         if (num >= MIN_NUMBER && num <= MAX_NUMBER) {
-            if (soldTickets.includes(numStr)) {
-                alert(`El número ${numStr} ya ha sido comprado. Por favor elige otro.`);
+            if (selectedNumbers.includes(num)) {
+                alert('Este número ya está en tu lista.');
                 return;
             }
 
-            if (!selectedNumbers.includes(num)) {
+            try {
+                setIsGenerating(true);
+                const res = await fetch('/api/tickets/reserve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketNumbers: [numStr], sessionId })
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.error || 'Este número no está disponible.');
+                }
+
                 const newSelection = [...selectedNumbers, num];
                 setSelectedNumbers(newSelection);
-                localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newSelection));
+                sessionStorage.setItem('checkout:selectedTickets', JSON.stringify(newSelection));
                 setManualNumber('');
-            } else {
-                alert('Este número ya está seleccionado');
+
+            } catch (error: any) {
+                console.error("[NumberSelector] Manual reserve failed:", error);
+                alert(error.message);
+            } finally {
+                setIsGenerating(false);
             }
         }
     };
@@ -179,7 +191,7 @@ export default function NumberSelector() {
     const removeNumber = (num: number) => {
         const newSelection = selectedNumbers.filter(n => n !== num);
         setSelectedNumbers(newSelection);
-        localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newSelection));
+        sessionStorage.setItem('checkout:selectedTickets', JSON.stringify(newSelection));
     };
 
     const handleContinue = () => {
@@ -187,27 +199,8 @@ export default function NumberSelector() {
             const BRIDGE_KEY = "checkout:selectedTickets";
             const nums = Array.from(new Set(selectedNumbers)); // dedupe
 
-            // Save to sessionStorage bridge for SPA navigation (pure array as requested)
-            console.log("BRIDGE SAVE:", nums);
+            // Save to sessionStorage bridge for SPA navigation
             sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(nums));
-            console.log("BRIDGE RAW:", sessionStorage.getItem(BRIDGE_KEY));
-
-            // Ensure sessionId exists in sessionStorage (stable for the tab session as requested)
-            let sessionId = sessionStorage.getItem('yvossoeee_sessionId');
-            if (!sessionId) {
-                // Check localStorage for continuity if they just navigated in
-                sessionId = localStorage.getItem('yvossoeee_sessionId');
-                if (!sessionId) {
-                    sessionId = typeof crypto !== 'undefined' && crypto.randomUUID
-                        ? crypto.randomUUID()
-                        : Math.random().toString(36).substring(2);
-                    localStorage.setItem('yvossoeee_sessionId', sessionId);
-                }
-                sessionStorage.setItem('yvossoeee_sessionId', sessionId);
-            }
-
-            // Also keep in localStorage for resilience (will be cleared on F5)
-            localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(nums));
 
             router.push('/checkout');
         }

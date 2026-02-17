@@ -50,24 +50,25 @@ export async function POST(request: Request) {
 
         // 2. Transaction with increased timeout (30s)
         const result = await prisma.$transaction(async (tx) => {
-            // Check availability
+            // Check availability - include the status and sessionId to distinguish
             const existing = await tx.ticket.findMany({
                 where: { number: { in: ticketNumbers } }
             });
 
-            const unavailable = existing.filter(t => {
+            const conflicts = existing.filter(t => {
                 const isSold = t.status === TicketStatus.SOLD;
-                const isHeldByOthers = t.status === TicketStatus.HELD &&
+                // If it's held by another session OR it's been long enough that it should have expired
+                const isHeldByOthers = t.status === TicketStatus.RESERVED &&
                     t.sessionId !== sessionId &&
                     t.reservedUntil && t.reservedUntil > now;
                 return isSold || isHeldByOthers;
             });
 
-            if (unavailable.length > 0) {
+            if (conflicts.length > 0) {
                 return {
                     success: false,
-                    code: 'TICKET_ALREADY_RESERVED',
-                    unavailable: unavailable.map(t => t.number)
+                    code: 'CONFLICT',
+                    conflicts: conflicts.map(t => t.number.toString().padStart(4, '0'))
                 };
             }
 
@@ -75,7 +76,12 @@ export async function POST(request: Request) {
             const existingNumbers = existing.map(t => t.number);
             const missingNumbers = ticketNumbers.filter(num => !existingNumbers.includes(num));
 
-            // Bulk Update
+            // Identify which were already reserved by THIS session (idempotency)
+            const alreadyReserved = existing
+                .filter(t => t.status === TicketStatus.RESERVED && t.sessionId === sessionId)
+                .map(t => t.number.toString().padStart(4, '0'));
+
+            // Bulk Update for ones that are AVAILABLE or already held by ME
             let updatedCount = 0;
             if (existingNumbers.length > 0) {
                 const res = await tx.ticket.updateMany({
@@ -87,7 +93,7 @@ export async function POST(request: Request) {
                         ]
                     },
                     data: {
-                        status: TicketStatus.HELD,
+                        status: TicketStatus.RESERVED,
                         sessionId: sessionId,
                         reservedUntil: expiresAt
                     }
@@ -95,49 +101,49 @@ export async function POST(request: Request) {
                 updatedCount = res.count;
             }
 
-            // Bulk Create
+            // Bulk Create for missing ones (optional safeguard, seeding is primary)
             let createdCount = 0;
             if (missingNumbers.length > 0) {
                 const res = await tx.ticket.createMany({
                     data: missingNumbers.map(num => ({
                         number: num,
-                        status: TicketStatus.HELD,
+                        status: TicketStatus.RESERVED,
                         sessionId: sessionId,
                         reservedUntil: expiresAt
-                    }))
+                    })),
+                    skipDuplicates: true
                 });
                 createdCount = res.count;
             }
 
-            if ((updatedCount + createdCount) !== batchSize) {
-                return {
-                    success: false,
-                    code: 'CONCURRENCY_ERROR',
-                    message: `Se reservaron ${updatedCount + createdCount} de ${batchSize}. Intente de nuevo.`
-                };
-            }
+            const allReserved = ticketNumbers.map(n => n.toString().padStart(4, '0'));
 
-            return { success: true };
+            return {
+                success: true,
+                reserved: allReserved,
+                skipped: alreadyReserved
+            };
         }, {
-            timeout: 30000 // 30 seconds for very large batches
+            timeout: 30000
         });
 
         if (!result.success) {
             return NextResponse.json({
                 ok: false,
                 code: result.code,
-                error: result.message || 'Algunos números ya no están disponibles.',
-                unavailable: result.unavailable,
+                error: 'Algunos números ya no están disponibles.',
+                conflicts: result.conflicts,
                 requestId
             }, { status: 409 });
         }
 
-        console.log(`[tickets/reserve] [${requestId}] Success for ${batchSize} tickets.`);
+        console.log(`[tickets/reserve] [${requestId}] Success for ${ticketNumbers.length} tickets.`);
 
         return NextResponse.json({
             ok: true,
-            requestId,
-            message: 'Tickets reserved successfully'
+            reserved: result.reserved,
+            skipped: result.skipped,
+            requestId
         });
 
     } catch (error: any) {

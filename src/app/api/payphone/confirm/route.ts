@@ -71,8 +71,9 @@ export async function POST(req: Request) {
         let emailSent = false;
 
         if (isPaid) {
-            await prisma.$transaction([
-                prisma.sale.update({
+            await prisma.$transaction(async (tx) => {
+                // 1. Update Sale
+                await tx.sale.update({
                     where: { id: sale.id },
                     data: {
                         status: SaleStatus.PAID,
@@ -80,12 +81,22 @@ export async function POST(req: Request) {
                         payphoneStatusCode: data.statusCode,
                         payphoneAuthorizationCode: String(data.authorizationCode || '')
                     }
-                }),
-                prisma.ticket.updateMany({
-                    where: { saleId: sale.id },
-                    data: { status: TicketStatus.SOLD }
-                })
-            ]);
+                });
+
+                // 2. Mark as SOLD (only if currently RESERVED)
+                // We clear session and TTL data to indicate final ownership
+                await tx.ticket.updateMany({
+                    where: {
+                        saleId: sale.id,
+                        status: TicketStatus.RESERVED
+                    },
+                    data: {
+                        status: TicketStatus.SOLD,
+                        sessionId: null,
+                        reservedUntil: null
+                    }
+                });
+            });
             console.log(`[PayPhone Confirm] Sale ${sale.id} confirmed as PAID`);
 
             // Intentar enviar correo

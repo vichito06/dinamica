@@ -30,6 +30,9 @@ model Ticket {
   saleId        String?
   sessionId     String?
   sale          Sale?        @relation(fields: [saleId], references: [id])
+
+  @@index([status, reservedUntil])
+  @@index([sessionId])
 }
 
 model Sale {
@@ -73,7 +76,7 @@ enum SaleStatus {
 
 enum TicketStatus {
   AVAILABLE
-  HELD
+  RESERVED
   SOLD
 }
 

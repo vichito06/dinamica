@@ -27,12 +27,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true, released: 0, skipped: 0, total: 0 }); // Idempotent
         }
 
-        // 2. Release the tickets if they belong to this session or are HELD (HELD in prisma = RESERVED)
-        // Note: Using TicketStatus.HELD which is the enum value for reserved tickets in this DB
+        // 2. Release the tickets ONLY if they are RESERVED by THIS session.
+        // This prevents one user from accidentally releasing another user's tickets if IDs collide or logic fails.
         const result = await prisma.ticket.updateMany({
             where: {
                 number: { in: numbersToRelease },
-                status: TicketStatus.HELD,
+                status: TicketStatus.RESERVED,
                 sessionId: sessionId
             },
             data: {
@@ -43,22 +43,25 @@ export async function POST(request: Request) {
             }
         });
 
-        const released = result.count;
-        const total = numbersToRelease.length;
-        const skipped = total - released;
+        const releasedCount = result.count;
+        const totalRequested = numbersToRelease.length;
+        const skippedCount = totalRequested - releasedCount;
 
-        console.log(`[tickets/release] [${requestId}] Released ${released} of ${total} tickets (skipped ${skipped}) for session ${sessionId}`);
+        console.log(`[tickets/release] [${requestId}] Released ${releasedCount} of ${totalRequested} tickets for session ${sessionId}`);
 
         return NextResponse.json({
             ok: true,
-            released,
-            skipped,
-            total,
+            released: releasedCount,
+            skipped: skippedCount,
             requestId
         });
 
     } catch (error: any) {
-        console.error(`[tickets/release] FATAL:`, error);
-        return NextResponse.json({ ok: false, error: 'Error interno al liberar el ticket' }, { status: 500 });
+        console.error(`[tickets/release] [req_release_${Date.now()}] FATAL:`, error);
+        return NextResponse.json({
+            ok: false,
+            error: 'Error interno al liberar el ticket',
+            message: error.message
+        }, { status: 500 });
     }
 }

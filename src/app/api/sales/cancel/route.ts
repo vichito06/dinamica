@@ -22,7 +22,7 @@ export async function POST(req: Request) {
             });
 
             await tx.ticket.updateMany({
-                where: { saleId: saleId, status: TicketStatus.HELD },
+                where: { saleId: saleId, status: TicketStatus.RESERVED },
                 data: { status: TicketStatus.AVAILABLE, reservedUntil: null, saleId: null }
             });
         });

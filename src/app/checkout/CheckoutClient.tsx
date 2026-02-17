@@ -73,43 +73,29 @@ export default function CheckoutClient() {
         if (hasReleasedOnMount.current) return;
         hasReleasedOnMount.current = true;
 
-        const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
-        const savedSessionId = sessionStorage.getItem('yvossoeee_sessionId') || localStorage.getItem('yvossoeee_sessionId');
-        console.log("BRIDGE READ:", sessionStorage.getItem(BRIDGE_KEY));
+        const SESSION_ID_KEY = "yvossoeee_sessionId";
+        const savedSessionId = sessionStorage.getItem(SESSION_ID_KEY);
         const bridgeNums = readBridge();
-
         const isHard = wasHardReload();
 
         // 1. HARD RESET: Clear and Redirect ONLY on actual Page Reload (F5) 
         if (isHard) {
-            const hasStoredSelection = bridgeNums.length > 0 || savedNumbers;
+            const hasStoredSelection = bridgeNums.length > 0;
 
             if (hasStoredSelection) {
-                console.log("[CheckoutClient] Hard Reload with selection. Clearing and redirecting.");
-
-                // State reset
-                setSelectedNumbers([]);
+                console.log("[CheckoutClient] Hard Reload detected: Clearing state zero and returning to Home");
 
                 // All persistence cleanup
-                localStorage.removeItem('yvossoeee_selectedNumbers');
-                localStorage.removeItem('yvossoeee_sessionId');
-                localStorage.removeItem('selectedNumbers'); // Legacy
-                localStorage.removeItem('selectedTickets'); // Legacy
-                localStorage.removeItem('ticket-store');    // Legacy
-                sessionStorage.removeItem('selectedNumbers'); // Legacy
-                sessionStorage.removeItem(BRIDGE_KEY); // Bridge
+                sessionStorage.removeItem(BRIDGE_KEY);
+                localStorage.removeItem('yvossoeee_selectedNumbers'); // Legacy cleanup
 
-                if (savedNumbers && savedSessionId) {
-                    try {
-                        const numbers = JSON.parse(savedNumbers);
-                        if (Array.isArray(numbers) && numbers.length > 0) {
-                            fetch('/api/tickets/release', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
-                            }).catch(err => console.error("[CheckoutClient] Release failed:", err));
-                        }
-                    } catch (e) { }
+                if (bridgeNums.length > 0 && savedSessionId) {
+                    // Release abandoned selection on backend
+                    fetch('/api/tickets/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticketNumbers: bridgeNums, sessionId: savedSessionId })
+                    }).catch(err => console.error("[CheckoutClient] Release failed:", err));
                 }
 
                 router.replace('/');
@@ -121,24 +107,11 @@ export default function CheckoutClient() {
         setIsHydrated(true);
 
         // 3. NORMAL NAVIGATION: Rehydrate and Reserve
-        let numbersToSet: number[] = bridgeNums;
-        let sessionIdToSet: string = savedSessionId || '';
+        if (bridgeNums.length > 0) {
+            setSelectedNumbers(bridgeNums);
+            setSessionId(savedSessionId || '');
 
-        // Fallback for localStorage if bridge is empty but storage isn't (resilience)
-        if (numbersToSet.length === 0 && savedNumbers) {
-            try {
-                const parsed = JSON.parse(savedNumbers);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    numbersToSet = parsed;
-                }
-            } catch (e) { }
-        }
-
-        if (numbersToSet.length > 0) {
-            setSelectedNumbers(numbersToSet);
-            setSessionId(sessionIdToSet);
-
-            // 4. RESERVE ON BACKEND (STRICTLY ONCE ON MOUNT)
+            // 4. RESERVE ON BACKEND (Idempotent)
             setIsReserving(true);
             setReserveError(null);
 
@@ -146,24 +119,20 @@ export default function CheckoutClient() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    ticketNumbers: numbersToSet,
-                    sessionId: sessionIdToSet
+                    ticketNumbers: bridgeNums,
+                    sessionId: savedSessionId
                 })
             })
                 .then(async (res) => {
                     const data = await res.json();
-                    if (!res.ok) {
-                        throw new Error(data.error || 'No se pudieron reservar los números.');
-                    }
+                    if (!res.ok) throw new Error(data.error || 'No se pudieron reservar los números.');
                     return data;
                 })
                 .catch((err) => {
                     console.error("[CheckoutClient] Reservation failed:", err);
-                    setReserveError(err.message || 'Error al reservar los tickets. Intenta de nuevo.');
+                    setReserveError(err.message || 'Error al reservar los tickets.');
                 })
-                .finally(() => {
-                    setIsReserving(false);
-                });
+                .finally(() => setIsReserving(false));
 
         } else {
             console.warn("[CheckoutClient] No selection found.");
@@ -171,10 +140,10 @@ export default function CheckoutClient() {
             setHasNoSelection(true);
         }
 
-        // 2. Page Close/Unload Listener (Best Effort)
+        // 5. Page Close/Unload Listener (Best Effort cleanup)
         const handleBeforeUnload = () => {
-            const currentSaved = localStorage.getItem('yvossoeee_selectedNumbers');
-            const currentSession = localStorage.getItem('yvossoeee_sessionId');
+            const currentSaved = sessionStorage.getItem(BRIDGE_KEY);
+            const currentSession = sessionStorage.getItem("yvossoeee_sessionId");
             if (currentSaved && currentSession) {
                 const blob = new Blob([JSON.stringify({
                     ticketNumbers: JSON.parse(currentSaved),
@@ -259,7 +228,8 @@ export default function CheckoutClient() {
                 throw new Error(reserveData.error || 'Algunos tickets ya no están disponibles.');
             }
 
-            console.log('[Checkout] Reservation confirmed. Creating sale...');
+            if (isDebugMode) console.log('[Checkout] Reservation confirmed. Creating sale...');
+
             setIsReserving(false);
             setIsPaying(true);
             setDebugInfo({ step: 'CREATE_SALE' });
@@ -317,7 +287,7 @@ export default function CheckoutClient() {
                 throw new Error('No se pudo generar el link de pago.');
             }
 
-            console.log("[Checkout] Redirecting to PayPhone:", paymentUrl);
+            if (isDebugMode) console.log("[Checkout] Redirecting to PayPhone:", paymentUrl);
             setDebugInfo(prev => ({ ...prev, step: 'REDIRECT', urlDetected: true }));
 
             // Give 500ms for user to see the debug info if in debug mode
@@ -344,9 +314,15 @@ export default function CheckoutClient() {
 
         const newNumbers = selectedNumbers.filter(n => n !== ticket);
         setSelectedNumbers(newNumbers);
-        localStorage.setItem('yvossoeee_selectedNumbers', JSON.stringify(newNumbers));
+        sessionStorage.setItem(BRIDGE_KEY, JSON.stringify(newNumbers));
 
-        // Note: Release on backend happens strictly on beforeunload or mount if stale.
+        // Release on backend immediately when removed from summary
+        fetch('/api/tickets/release', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ticketNumbers: [ticket], sessionId })
+        }).catch(err => console.error("[CheckoutClient] Immediate release failed:", err));
+
         if (newNumbers.length === 0) {
             router.push('/');
         }

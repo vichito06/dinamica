@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         // Find expired tickets that are HELD
         const expiredTickets = await prisma.ticket.findMany({
             where: {
-                status: TicketStatus.HELD,
+                status: TicketStatus.RESERVED,
                 reservedUntil: { lt: now }
             },
             include: { sale: true }

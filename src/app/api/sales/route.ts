@@ -94,7 +94,7 @@ export async function POST(request: Request) {
                 await tx.ticket.updateMany({
                     where: { number: { in: existingNumbers } },
                     data: {
-                        status: TicketStatus.HELD,
+                        status: TicketStatus.RESERVED,
                         saleId: sale.id,
                         sessionId: sessionId,
                         reservedUntil: expiresAt,
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
                 await tx.ticket.createMany({
                     data: missingNumbers.map((num: number) => ({
                         number: num,
-                        status: TicketStatus.HELD,
+                        status: TicketStatus.RESERVED,
                         saleId: sale.id,
                         sessionId: sessionId,
                         reservedUntil: expiresAt,

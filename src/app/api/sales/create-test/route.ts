@@ -68,7 +68,7 @@ export async function POST(request: Request) {
             await tx.ticket.update({
                 where: { id: ticket!.id },
                 data: {
-                    status: TicketStatus.HELD,
+                    status: TicketStatus.RESERVED,
                     saleId: newSale.id,
                     reservedUntil: new Date(Date.now() + 15 * 60 * 1000)
                 }
