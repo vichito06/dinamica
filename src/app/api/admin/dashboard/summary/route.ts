@@ -19,10 +19,10 @@ export async function GET(req: Request) {
         dateTo.setHours(23, 59, 59, 999);
 
         // 1. Get Active Raffle
-        let activeRaffle = await prisma.raffle.findFirst({ where: { active: true } });
+        let activeRaffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
         if (!activeRaffle) {
             activeRaffle = await prisma.raffle.create({
-                data: { name: 'Dinamica Principal', active: true }
+                data: { name: 'Dinamica Principal', status: 'ACTIVE' }
             });
         }
 

@@ -15,7 +15,7 @@ export async function GET(req: Request) {
         const skip = (page - 1) * pageSize;
 
         // Get Active Raffle
-        const activeRaffle = await prisma.raffle.findFirst({ where: { active: true } });
+        const activeRaffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
         if (!activeRaffle) return NextResponse.json({ ok: false, error: 'No active raffle' }, { status: 404 });
 
         // Build Filters

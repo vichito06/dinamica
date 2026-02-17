@@ -11,7 +11,7 @@ export async function GET(req: Request) {
         const limit = parseInt(searchParams.get('limit') || '20', 10);
 
         // Get Active Raffle
-        const activeRaffle = await prisma.raffle.findFirst({ where: { active: true } });
+        const activeRaffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
         if (!activeRaffle) return NextResponse.json({ ok: true, tickets: [] });
 
         const tickets = await prisma.ticket.findMany({

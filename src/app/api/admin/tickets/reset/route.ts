@@ -19,15 +19,15 @@ export async function POST(req: Request) {
         const result = await prisma.$transaction(async (tx) => {
             // A. Deactivate current raffles
             await tx.raffle.updateMany({
-                where: { active: true },
-                data: { active: false }
+                where: { status: 'ACTIVE' },
+                data: { status: 'CLOSED' }
             });
 
             // B. Create new Raffle
             const newRaffle = await tx.raffle.create({
                 data: {
                     name: `Dinamica ${new Date().toLocaleDateString()}`,
-                    active: true
+                    status: 'ACTIVE'
                 }
             });
 
