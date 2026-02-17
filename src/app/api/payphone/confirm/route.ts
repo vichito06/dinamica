@@ -19,9 +19,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: false, error: 'Missing id or clientTransactionId' }, { status: 400 });
         }
 
-        const sale = await prisma.sale.findUnique({
+        const sale = await prisma.sale.findFirst({
             where: { clientTransactionId },
-            select: { id: true, status: true, customer: true, amountCents: true, clientTransactionId: true }
+            select: { id: true, status: true, customer: true, amountCents: true, clientTransactionId: true, raffleId: true }
         });
 
         if (!sale) {
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
                     }
 
                     // 2. [SNAPSHOT] Guardar estado PAID y números en la MISMA transacción
-                    await tx.sale.update({
+                    const updatedSale = await tx.sale.update({
                         where: { id: sale.id },
                         data: {
                             status: SaleStatus.PAID,
@@ -102,20 +102,22 @@ export async function POST(req: Request) {
                             payphoneAuthorizationCode: String(data.authorizationCode || ''),
                             payphonePaymentId: String(id),
                             ticketNumbers: rec.ticketNumbers // Snapshot definitivo
-                        } as any
+                        } as any,
+                        include: { customer: true }
                     });
 
-                    return rec;
+                    return { ...rec, sale: updatedSale };
                 }, { timeout: 15000 });
 
                 const ticketNumbers = recoveryResult.ticketNumbers;
+                const customer = recoveryResult.sale.customer;
                 console.log(`[SNAPSHOT] saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
 
                 // Email (best effort)
                 try {
                     await sendTicketsEmail({
-                        to: sale.customer.email,
-                        customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
+                        to: customer.email,
+                        customerName: `${customer.firstName} ${customer.lastName}`,
                         saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
                         tickets: ticketNumbers,
                         total: sale.amountCents / 100
@@ -155,7 +157,10 @@ export async function POST(req: Request) {
                     data: { status: SaleStatus.CANCELED }
                 }),
                 prisma.ticket.updateMany({
-                    where: { saleId: sale.id },
+                    where: {
+                        saleId: sale.id,
+                        raffleId: sale.raffleId || ''
+                    },
                     data: { status: TicketStatus.AVAILABLE, saleId: null, reservedUntil: null, sessionId: null }
                 })
             ]);

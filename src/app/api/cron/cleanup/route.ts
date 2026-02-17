@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { SaleStatus, TicketStatus } from '@prisma/client';
+import { getActiveRaffleId } from '@/lib/raffle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // Prevent caching
@@ -13,11 +14,13 @@ export async function GET(request: Request) {
         //     return new Response('Unauthorized', { status: 401 });
         // }
 
+        const raffleId = await getActiveRaffleId();
         const now = new Date();
 
-        // Find expired tickets that are RESERVED
+        // Find expired tickets that are RESERVED in the ACTIVE raffle
         const expiredTickets = await prisma.ticket.findMany({
             where: {
+                raffleId,
                 status: TicketStatus.RESERVED,
                 reservedUntil: { lt: now }
             },

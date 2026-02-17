@@ -12,7 +12,13 @@ export async function POST(req: Request) {
             return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
 
-        const existing = await prisma.ticket.count();
+        // Get Active Raffle
+        const raffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
+        if (!raffle) {
+            return Response.json({ ok: false, error: "No active raffle" }, { status: 404 });
+        }
+
+        const existing = await prisma.ticket.count({ where: { raffleId: raffle.id } });
         if (existing > 0) {
             // If tickets exist, we don't overwrite to prevent data loss
             return Response.json({ ok: true, message: "already seeded", existing });
@@ -23,6 +29,7 @@ export async function POST(req: Request) {
         const data = Array.from({ length: 9999 }, (_, i) => ({
             number: i + 1,
             status: TicketStatus.AVAILABLE,
+            raffleId: raffle.id
         }));
 
         let inserted = 0;

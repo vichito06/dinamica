@@ -34,9 +34,21 @@ export async function POST(request: Request) {
 
         // 2. Transaction: Verify Availability + Create Customer/Sale + Reserve
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+            // Get Active Raffle
+            const activeRaffle = await tx.raffle.findFirst({
+                where: { status: 'ACTIVE' }
+            });
+
+            if (!activeRaffle) {
+                throw new Error('NO_ACTIVE_RAFFLE:No hay un sorteo activo en este momento.');
+            }
+
             // Check availability
             const existingTickets = await tx.ticket.findMany({
-                where: { number: { in: ticketNumbers } }
+                where: {
+                    number: { in: ticketNumbers },
+                    raffleId: activeRaffle.id
+                }
             });
 
             const now = new Date();
@@ -89,6 +101,7 @@ export async function POST(request: Request) {
                     customerId: customer.id,
                     provider: 'PAYPHONE',
                     requestedNumbers: requestedNumbers, // Evidence for recovery
+                    raffleId: activeRaffle.id
                 }
             });
 
@@ -100,7 +113,10 @@ export async function POST(request: Request) {
             let updatedCount = 0;
             if (existingNumbers.length > 0) {
                 const updateBatch = await tx.ticket.updateMany({
-                    where: { number: { in: existingNumbers } },
+                    where: {
+                        number: { in: existingNumbers },
+                        raffleId: activeRaffle.id
+                    },
                     data: {
                         status: TicketStatus.RESERVED,
                         saleId: sale.id,
@@ -119,6 +135,7 @@ export async function POST(request: Request) {
                         saleId: sale.id,
                         sessionId: sessionId,
                         reservedUntil: expiresAt,
+                        raffleId: activeRaffle.id
                     }))
                 });
                 createdCount = createBatch.count;

@@ -4,7 +4,7 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
     // 1) Leer venta con toda la evidencia
     const sale = await tx.sale.findUnique({
         where: { id: saleId },
-        select: { id: true, ticketNumbers: true, requestedNumbers: true, status: true },
+        select: { id: true, ticketNumbers: true, requestedNumbers: true, status: true, raffleId: true },
     });
 
     if (!sale) {
@@ -14,6 +14,7 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
 
     const ticketNumbers = (sale as any).ticketNumbers || [];
     const requestedNumbers = (sale as any).requestedNumbers || [];
+    const raffleId = sale.raffleId;
 
     const snapshotNorm = (Array.isArray(ticketNumbers) ? ticketNumbers : []).map((n: any) => String(n).padStart(4, "0"));
     const requestedNorm = (Array.isArray(requestedNumbers) ? requestedNumbers : []).map((n: any) => String(n).padStart(4, "0"));
@@ -25,7 +26,7 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
     }
 
     // ✅ TIER 2: [PROMOTE] Si hay requestedNumbers (LEY 0)
-    if (requestedNorm.length > 0) {
+    if (requestedNorm.length > 0 && raffleId) {
         const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
         const targetStatus = sale.status === SaleStatus.PAID ? TicketStatus.SOLD : reservedStatus;
 
@@ -34,7 +35,9 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
         for (const numStr of requestedNorm) {
             const numInt = parseInt(numStr, 10);
             await tx.ticket.upsert({
-                where: { number: numInt },
+                where: {
+                    raffleId_number: { raffleId, number: numInt }
+                },
                 update: {
                     saleId: sale.id,
                     status: targetStatus,
@@ -43,6 +46,7 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
                 },
                 create: {
                     number: numInt,
+                    raffleId: raffleId,
                     saleId: sale.id,
                     status: targetStatus,
                     reservedUntil: null
@@ -66,6 +70,7 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
     const tickets = await tx.ticket.findMany({
         where: {
             saleId,
+            raffleId: raffleId || undefined,
             status: { in: [TicketStatus.SOLD, reservedStatus] },
         },
         select: { number: true, status: true },
@@ -83,7 +88,11 @@ export async function recoverAndFixTicketNumbers(tx: any, saleId: string) {
     if (sale.status === SaleStatus.PAID && hasReserved) {
         console.log(`[PROMOTE] saleId=${saleId} status=PAID count=${nums.length} promoting RESERVED to SOLD`);
         await tx.ticket.updateMany({
-            where: { saleId, status: reservedStatus },
+            where: {
+                saleId,
+                status: reservedStatus,
+                raffleId: raffleId || ''
+            },
             data: { status: TicketStatus.SOLD, sessionId: null, reservedUntil: null },
         });
     }

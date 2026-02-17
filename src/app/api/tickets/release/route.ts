@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { TicketStatus } from '@prisma/client';
+import { getActiveRaffleId } from '@/lib/raffle';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: false, error: 'Número(s) de ticket y sessionId son requeridos' }, { status: 400 });
         }
 
+        const raffleId = await getActiveRaffleId();
+
         const numbersToReleaseRaw = ticketNumbers
             ? ticketNumbers.map((n: string | number) => parseInt(n.toString(), 10)).filter((n: number) => !isNaN(n))
             : [parseInt(ticketNumber.toString(), 10)];
@@ -21,16 +24,16 @@ export async function POST(request: Request) {
         // 1. Deduplicate and filter range
         const numbersToRelease: number[] = (Array.from(new Set(numbersToReleaseRaw)) as any[])
             .map(n => parseInt(n.toString(), 10))
-            .filter((n: number) => !isNaN(n) && n >= 1 && n <= 9999);
+            .filter((n: number) => !isNaN(n) && n >= 0 && n <= 99999);
 
         if (numbersToRelease.length === 0) {
             return NextResponse.json({ ok: true, released: 0, skipped: 0, total: 0 }); // Idempotent
         }
 
-        // 2. Release the tickets ONLY if they are RESERVED by THIS session.
-        // This prevents one user from accidentally releasing another user's tickets if IDs collide or logic fails.
+        // 2. Release the tickets ONLY if they are RESERVED by THIS session in THIS raffle.
         const result = await prisma.ticket.updateMany({
             where: {
+                raffleId: raffleId,
                 number: { in: numbersToRelease },
                 status: TicketStatus.RESERVED,
                 sessionId: sessionId

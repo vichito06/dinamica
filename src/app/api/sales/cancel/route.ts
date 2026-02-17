@@ -1,8 +1,9 @@
-export const runtime = "nodejs";
-
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
+import { getActiveRaffleId } from "@/lib/raffle";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
     try {
@@ -10,10 +11,14 @@ export async function POST(req: Request) {
 
         if (!saleId) return NextResponse.json({ error: "saleId required" }, { status: 400 });
 
-        await prisma.$transaction(async (tx) => {
-            const sale = await tx.sale.findUnique({ where: { id: saleId } });
+        const raffleId = await getActiveRaffleId();
 
-            if (!sale) return; // Silent fail if not found
+        await prisma.$transaction(async (tx) => {
+            const sale = await tx.sale.findUnique({
+                where: { id: saleId, raffleId: raffleId }
+            });
+
+            if (!sale) return; // Silent fail if not found in active raffle
             if (sale.status !== SaleStatus.PENDING) return; // Only cancel pending
 
             await tx.sale.update({
@@ -22,7 +27,11 @@ export async function POST(req: Request) {
             });
 
             await tx.ticket.updateMany({
-                where: { saleId: saleId, status: TicketStatus.RESERVED },
+                where: {
+                    saleId: saleId,
+                    status: TicketStatus.RESERVED,
+                    raffleId: raffleId
+                },
                 data: { status: TicketStatus.AVAILABLE, reservedUntil: null, saleId: null }
             });
         });

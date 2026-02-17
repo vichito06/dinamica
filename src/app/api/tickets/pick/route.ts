@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { TicketStatus } from "@prisma/client";
+import { getActiveRaffle } from "@/lib/raffle";
 
 export const runtime = "nodejs";
 
@@ -20,10 +21,12 @@ export async function POST(req: Request) {
         // Atomic pick using raw SQL for SKIP LOCKED performance/safety
         const result = await prisma.$transaction(async (tx) => {
             const now = new Date();
+            const activeRaffle = await getActiveRaffle(tx);
 
             // 1. Release expired RESERVED tickets first to maximize inventory
             await tx.ticket.updateMany({
                 where: {
+                    raffleId: activeRaffle.id,
                     status: TicketStatus.RESERVED,
                     reservedUntil: { lt: now }
                 },
@@ -42,6 +45,7 @@ export async function POST(req: Request) {
                 FROM "Ticket"
                 WHERE "status" = 'AVAILABLE'
                   AND "saleId" IS NULL
+                  AND "raffleId" = ${activeRaffle.id}
                 ORDER BY RANDOM()
                 LIMIT ${count}
                 FOR UPDATE SKIP LOCKED

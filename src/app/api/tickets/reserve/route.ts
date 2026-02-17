@@ -52,11 +52,18 @@ export async function POST(request: Request) {
         const result = await prisma.$transaction(async (tx) => {
             const now = new Date();
 
+            // Get Active Raffle
+            const raffle = await tx.raffle.findFirst({ where: { status: 'ACTIVE' } });
+            if (!raffle) {
+                throw new Error('NO_ACTIVE_RAFFLE:No active raffle found');
+            }
+
             // A. Release expired RESERVED tickets first to maximize inventory
             await tx.ticket.updateMany({
                 where: {
                     status: TicketStatus.RESERVED,
-                    reservedUntil: { lt: now }
+                    reservedUntil: { lt: now },
+                    raffleId: raffle.id
                 },
                 data: {
                     status: TicketStatus.AVAILABLE,
@@ -68,7 +75,10 @@ export async function POST(request: Request) {
 
             // B. Check availability for requested tickets
             const existing = await tx.ticket.findMany({
-                where: { number: { in: ticketNumbers } }
+                where: {
+                    number: { in: ticketNumbers },
+                    raffleId: raffle.id
+                }
             });
 
             const conflicts = existing.filter(t => {
@@ -98,7 +108,8 @@ export async function POST(request: Request) {
                     await tx.ticket.updateMany({
                         where: {
                             number: { in: availableToReserve },
-                            status: TicketStatus.AVAILABLE
+                            status: TicketStatus.AVAILABLE,
+                            raffleId: raffle.id
                         },
                         data: {
                             status: TicketStatus.RESERVED,
@@ -121,6 +132,7 @@ export async function POST(request: Request) {
                 await tx.ticket.updateMany({
                     where: {
                         number: { in: existingNumbers },
+                        raffleId: raffle.id,
                         OR: [
                             { status: TicketStatus.AVAILABLE },
                             { sessionId: sessionId }
@@ -141,7 +153,8 @@ export async function POST(request: Request) {
                         number: num,
                         status: TicketStatus.RESERVED,
                         sessionId: sessionId,
-                        reservedUntil: expiresAt
+                        reservedUntil: expiresAt,
+                        raffleId: raffle.id
                     })),
                     skipDuplicates: true
                 });
