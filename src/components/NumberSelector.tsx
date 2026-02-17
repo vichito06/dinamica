@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Dices, Hash, ShoppingCart, Check, Loader2, ArrowRight } from 'lucide-react';
@@ -18,23 +18,71 @@ export default function NumberSelector() {
     const [isGenerating, setIsGenerating] = useState(false);
     const [selectedQuantity, setSelectedQuantity] = useState(1);
     const [soldTickets, setSoldTickets] = useState<string[]>([]);
+    const hasReleasedOnMount = useRef(false);
 
     useEffect(() => {
-        // Load persist selection
+        if (hasReleasedOnMount.current) return;
+        hasReleasedOnMount.current = true;
+
+        // 1. HARD RESET: Clear selection immediately on load/refresh
         const saved = localStorage.getItem('yvossoeee_selectedNumbers');
-        if (saved) {
+        const sessionId = localStorage.getItem('yvossoeee_sessionId');
+
+        // Always reset local state to empty
+        setSelectedNumbers([]);
+
+        // Remove from storage instantly to prevent rehydration or surviving double-renders
+        localStorage.removeItem('yvossoeee_selectedNumbers');
+        localStorage.removeItem('yvossoeee_sessionId');
+        localStorage.removeItem('selectedNumbers'); // Legacy
+        localStorage.removeItem('selectedTickets'); // Legacy
+        localStorage.removeItem('ticket-store');    // Legacy
+        sessionStorage.removeItem('selectedNumbers'); // Legacy
+
+        if (saved && sessionId) {
             try {
-                setSelectedNumbers(JSON.parse(saved));
+                const numbers = JSON.parse(saved);
+                if (Array.isArray(numbers) && numbers.length > 0) {
+                    console.log("[NumberSelector] Hard Reset: Releasing abandoned selection:", numbers);
+
+                    // Trigger backend liberation (best effort, non-blocking)
+                    fetch('/api/tickets/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticketNumbers: numbers, sessionId })
+                    }).catch(err => console.error("[NumberSelector] Release failed:", err));
+                }
             } catch (e) {
-                console.error("Error loading saved numbers", e);
+                console.error("Error processing abandoned selection", e);
             }
         }
 
-        // Fetch sold tickets
+        // 3. Page Close/Unload Listener (Best Effort)
+        const handleBeforeUnload = () => {
+            const currentSaved = localStorage.getItem('yvossoeee_selectedNumbers');
+            const currentSession = localStorage.getItem('yvossoeee_sessionId');
+            if (currentSaved && currentSession) {
+                const blob = new Blob([JSON.stringify({
+                    ticketNumbers: JSON.parse(currentSaved),
+                    sessionId: currentSession
+                })], { type: 'application/json' });
+                navigator.sendBeacon('/api/tickets/release', blob);
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('pagehide', handleBeforeUnload);
+
+        // 4. Fetch sold tickets
         fetch('/api/tickets/sold')
             .then(res => res.json())
             .then(data => setSoldTickets(data))
             .catch(err => console.error(err));
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pagehide', handleBeforeUnload);
+        };
     }, []);
 
     useEffect(() => {

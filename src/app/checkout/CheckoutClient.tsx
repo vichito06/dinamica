@@ -43,6 +43,7 @@ export default function CheckoutClient() {
     });
     const [isReserving, setIsReserving] = useState(false);
     const searchParams = useSearchParams();
+    const hasReleasedOnMount = useRef(false);
 
     // Debug Mode Logic: dev mode OR ?debug=1
     // (Explicitly hide if ?debug=0)
@@ -50,37 +51,72 @@ export default function CheckoutClient() {
     const isDebugMode = debugParam === '1' || (process.env.NODE_ENV === 'development' && debugParam !== '0');
 
     useEffect(() => {
-        // Load persist selection
+        if (hasReleasedOnMount.current) return;
+        hasReleasedOnMount.current = true;
+
+        // 1. HARD RESET: Clear and Redirect immediately on Refresh
         const savedNumbers = localStorage.getItem('yvossoeee_selectedNumbers');
         const savedSessionId = localStorage.getItem('yvossoeee_sessionId');
 
-        if (savedNumbers) {
+        // Always ensure local state is clean
+        setSelectedNumbers([]);
+
+        // Remove from storage instantly
+        localStorage.removeItem('yvossoeee_selectedNumbers');
+        localStorage.removeItem('yvossoeee_sessionId');
+        localStorage.removeItem('selectedNumbers'); // Legacy
+        localStorage.removeItem('selectedTickets'); // Legacy
+        localStorage.removeItem('ticket-store');    // Legacy
+        sessionStorage.removeItem('selectedNumbers'); // Legacy
+
+        if (savedNumbers && savedSessionId) {
             try {
-                setSelectedNumbers(JSON.parse(savedNumbers));
+                const numbers = JSON.parse(savedNumbers);
+                if (Array.isArray(numbers) && numbers.length > 0) {
+                    console.log("[CheckoutClient] Hard Reset: Liberating abandoned selection and redirecting", numbers);
+
+                    // Liberate on backend (best effort, non-blocking background task)
+                    fetch('/api/tickets/release', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ticketNumbers: numbers, sessionId: savedSessionId })
+                    }).catch(err => console.error("[CheckoutClient] Release failed:", err));
+
+                    // Go home immediately
+                    router.replace('/');
+                    return;
+                }
             } catch (e) {
-                console.error("Error parsing saved numbers", e);
-            }
-        } else {
-            // Check legacy sessionStorage for transition
-            const legacy = sessionStorage.getItem('selectedNumbers');
-            if (legacy) {
-                try {
-                    const parsed = JSON.parse(legacy);
-                    setSelectedNumbers(parsed);
-                    localStorage.setItem('yvossoeee_selectedNumbers', legacy);
-                } catch (e) { }
+                console.error("Error processing abandoned selection on mount", e);
             }
         }
 
-        if (savedSessionId) {
-            setSessionId(savedSessionId);
-        } else {
-            const newSessionId = typeof crypto !== 'undefined' && crypto.randomUUID
-                ? crypto.randomUUID()
-                : Math.random().toString(36).substring(2);
-            setSessionId(newSessionId);
-            localStorage.setItem('yvossoeee_sessionId', newSessionId);
+        // If we reach here and have no numbers, we should also probably go home
+        // But we wait for the first render to be safe.
+        if (!savedNumbers || (savedNumbers && JSON.parse(savedNumbers).length === 0)) {
+            router.replace('/');
         }
+
+        // 2. Page Close/Unload Listener (Best Effort)
+        const handleBeforeUnload = () => {
+            const currentSaved = localStorage.getItem('yvossoeee_selectedNumbers');
+            const currentSession = localStorage.getItem('yvossoeee_sessionId');
+            if (currentSaved && currentSession) {
+                const blob = new Blob([JSON.stringify({
+                    ticketNumbers: JSON.parse(currentSaved),
+                    sessionId: currentSession
+                })], { type: 'application/json' });
+                navigator.sendBeacon('/api/tickets/release', blob);
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        window.addEventListener('pagehide', handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            window.removeEventListener('pagehide', handleBeforeUnload);
+        };
     }, [router]);
 
     const totalPrice = selectedNumbers.length;
@@ -133,11 +169,34 @@ export default function CheckoutClient() {
     };
 
     const splitFullName = (name: string) => {
-        const parts = name.trim().toUpperCase().split(/\s+/);
-        if (parts.length === 1) return { first: parts[0], last: '' };
+        const parts = name.trim().toUpperCase().split(/\s+/).filter(Boolean);
+        if (parts.length === 0) return { first: "", last: "" };
+        if (parts.length === 1) return { first: parts[0], last: "" };
 
-        const last = parts.slice(-1).join(' '); // Simple: last word is lastName
-        const first = parts.slice(0, -1).join(' '); // The rest is firstName
+        // Common connectors/prepositions in compound last names
+        const connectors = new Set([
+            "DE", "DEL", "LA", "LAS", "LOS", "Y",
+            "DA", "DO", "DOS", "DAS",
+            "VAN", "VON", "DER", "DEN", "DI"
+        ]);
+
+        // Default: take last 2 words as last name if 3+ words, else last 1
+        let lastCount = parts.length >= 3 ? 2 : 1;
+
+        // If the word before the last is a connector, include it in the last name (e.g., "DEL RIO", "DE LA TORRE")
+        // Keep extending backwards while connectors appear.
+        let i = parts.length - lastCount;
+        while (i - 1 >= 0 && connectors.has(parts[i - 1])) {
+            lastCount += 1;
+            i -= 1;
+        }
+
+        const last = parts.slice(-lastCount).join(" ");
+        const first = parts.slice(0, -lastCount).join(" ");
+
+        // Fallback: if first becomes empty (rare), revert to last word logic
+        if (!first) return { first: parts[0], last: parts.slice(1).join(" ") };
+
         return { first, last };
     };
 
