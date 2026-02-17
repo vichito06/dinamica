@@ -5,7 +5,8 @@ import { cookies } from 'next/headers';
 export async function POST(request: Request) {
     try {
         const { password } = await request.json();
-        const adminPassword = process.env.ADMIN_PASSWORD;
+        const adminPassword = (process.env.ADMIN_PASSWORD ?? "").trim();
+        const inputPassword = (password ?? "").trim();
 
         if (!adminPassword) {
             console.error('ADMIN_PASSWORD is not set in environment variables');
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
             );
         }
 
-        if (password === adminPassword) {
+        if (inputPassword === adminPassword) {
             // Set HttpOnly cookie
             const cookieStore = await cookies();
             // Set a cookie valid for 1 day
