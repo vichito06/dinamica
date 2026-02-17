@@ -8,6 +8,13 @@ export async function POST(request: Request) {
         const adminPassword = (process.env.ADMIN_PASSWORD ?? "").trim();
         const inputPassword = (password ?? "").trim();
 
+        console.log("[ADMIN_LOGIN_ENV]", {
+            hasEnv: Boolean(process.env.ADMIN_PASSWORD),
+            len: (process.env.ADMIN_PASSWORD ?? "").length,
+            first: (process.env.ADMIN_PASSWORD ?? "").slice(0, 3),
+            last: (process.env.ADMIN_PASSWORD ?? "").slice(-3),
+        });
+
         if (!adminPassword) {
             console.error('ADMIN_PASSWORD is not set in environment variables');
             return NextResponse.json(
