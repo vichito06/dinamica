@@ -141,8 +141,8 @@ function DashboardView() {
         totalAmount: 0,
         ticketsSold: 0,
         buyers: 0,
-        totalTickets: 99999,
-        ticketsAvailable: 99999
+        totalTickets: 9999,
+        ticketsAvailable: 9999
     });
     const [sales, setSales] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

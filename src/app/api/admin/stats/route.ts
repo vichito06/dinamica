@@ -4,7 +4,7 @@ import { prisma } from "../../../../lib/prisma";
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const TOTAL_TICKETS = 99999; // Según el plan y requerimiento anterior
+const TOTAL_TICKETS = 9999; // 0001 al 9999
 
 export async function GET() {
     try {
