@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Hero from '@/components/Hero';
 import NumberSelector from '@/components/NumberSelector';
 
@@ -9,22 +9,36 @@ interface HomeClientProps {
 }
 
 export default function HomeClient({ settings }: HomeClientProps) {
-    const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+    const selectionRef = useRef<HTMLDivElement>(null);
+
+    const handleStartBuying = () => {
+        selectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    };
 
     return (
         <>
             <Hero
                 raffleTitle={settings.raffleTitle}
                 prizes={settings.prizes}
-                onStartBuying={() => setIsSelectorOpen(true)}
+                onStartBuying={handleStartBuying}
             />
 
-            {isSelectorOpen && (
-                <NumberSelector
-                    isOpen={isSelectorOpen}
-                    onClose={() => setIsSelectorOpen(false)}
-                />
-            )}
+            {/* Direct Ticket Selection Section */}
+            <section ref={selectionRef} className="py-20 bg-black/40 border-y border-white/5 relative">
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent pointer-events-none" />
+                <div className="container-custom relative">
+                    <div className="text-center mb-16">
+                        <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                            ¡Participa Ahora!
+                        </h2>
+                        <p className="text-lg text-gray-400">
+                            Elige tus números de la suerte y asegura tu lugar en el sorteo.
+                        </p>
+                    </div>
+
+                    <NumberSelector isInline={true} />
+                </div>
+            </section>
 
             {/* Features Section - Separated box, more spacing */}
             <section className="py-32 textured-bg">

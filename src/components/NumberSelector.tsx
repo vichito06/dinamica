@@ -14,11 +14,12 @@ const QUANTITY_OPTIONS = [1, 5, 10, 20, 50, 100];
 // Number range configuration
 
 interface NumberSelectorProps {
-    isOpen: boolean;
-    onClose: () => void;
+    isOpen?: boolean;
+    onClose?: () => void;
+    isInline?: boolean;
 }
 
-export default function NumberSelector({ isOpen, onClose }: NumberSelectorProps) {
+export default function NumberSelector({ isOpen, onClose, isInline = false }: NumberSelectorProps) {
     const router = useRouter();
     const [selectedNumbers, setSelectedNumbers] = useState<number[]>([]);
     const [manualNumber, setManualNumber] = useState('');
@@ -259,13 +260,8 @@ export default function NumberSelector({ isOpen, onClose }: NumberSelectorProps)
 
     const totalPrice = selectedNumbers.length;
 
-    return (
-        <Modal
-            isOpen={isOpen}
-            onClose={onClose}
-            title="Selecciona tus Números"
-            maxWidth="1200px"
-        >
+    const content = (
+        <>
             <div className="selector-cards-container grid grid-cols-1 md:grid-cols-2 mb-12 gap-8">
                 {/* Multiple Random Generator */}
                 <motion.div
@@ -416,6 +412,21 @@ export default function NumberSelector({ isOpen, onClose }: NumberSelectorProps)
                     </div>
                 </motion.div>
             )}
+        </>
+    );
+
+    if (isInline) {
+        return content;
+    }
+
+    return (
+        <Modal
+            isOpen={isOpen || false}
+            onClose={onClose || (() => { })}
+            title="Selecciona tus Números"
+            maxWidth="1200px"
+        >
+            {content}
         </Modal>
     );
 }
