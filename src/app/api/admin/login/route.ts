@@ -1,53 +1,69 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { createHmac } from 'crypto';
+import { createHash } from 'crypto';
+
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
+function sha(s: string) {
+    return createHash("sha256").update(s).digest("hex").slice(0, 12);
+}
 
 export async function POST(request: Request) {
     try {
-        const { password } = await request.json();
+        const body = await request.json().catch(() => ({}));
+        const inputRaw = String(body?.password ?? "");
+        const envRaw = String(process.env.ADMIN_PASSWORD ?? "");
+        const secretRaw = String(process.env.ADMIN_SESSION_SECRET ?? "");
 
-        const normalize = (s: string | undefined | null) =>
-            (s ?? "").trim().replace(/\.+$/, ""); // quita SOLO puntos al final
+        // Normalización básica
+        const input = inputRaw.trim();
+        const env = envRaw.trim();
+        const secret = secretRaw.trim();
 
-        const adminPassword = normalize(process.env.ADMIN_PASSWORD);
-        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+        const ok = input === env && env.length > 0;
 
-        if (!adminPassword || !secret) {
+        if (!ok) {
             return NextResponse.json(
-                { success: false, error: 'Missing environment configuration' },
+                {
+                    success: false,
+                    error: "Contraseña incorrecta",
+                    debug: {
+                        hasEnv: Boolean(envRaw),
+                        statusEnv: envRaw ? "present" : "missing",
+                        envLen: env.length,
+                        inputLen: input.length,
+                        envHash: sha(env),
+                        inputHash: sha(input),
+                        envFirst: env.slice(0, 2),
+                    },
+                },
+                { status: 401 }
+            );
+        }
+
+        if (!secret) {
+            return NextResponse.json(
+                { success: false, error: 'Configuración incompleta (SECRET)' },
                 { status: 500 }
             );
         }
 
-        const inputPassword = normalize(password);
+        // Éxito: Crear sesión
+        const sessionToken = secret;
+        const cookieStore = await cookies();
+        const oneDay = 24 * 60 * 60;
 
-        if (inputPassword === adminPassword) {
-            // Create a signed session token
-            // HMAC(payload, secret)
-            const signature = createHmac('sha256', secret)
-                .update('admin-session')
-                .digest('hex');
+        cookieStore.set('admin_session', sessionToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: oneDay,
+            path: '/',
+        });
 
-            const cookieStore = await cookies();
+        return NextResponse.json({ success: true });
 
-            // Set for 24 hours
-            const oneDay = 24 * 60 * 60;
-
-            cookieStore.set('admin_session', signature, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                maxAge: oneDay,
-                path: '/',
-            });
-
-            return NextResponse.json({ success: true });
-        }
-
-        return NextResponse.json(
-            { success: false, error: 'Contraseña incorrecta' },
-            { status: 401 }
-        );
     } catch (error) {
         return NextResponse.json(
             { success: false, error: 'Error interno del servidor' },
