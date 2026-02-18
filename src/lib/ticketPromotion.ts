@@ -31,9 +31,10 @@ export async function promoteTicketsForSale(tx: any, saleId: string) {
     const have = new Set(existing.map((t: any) => t.number));
     const missing = numbers.filter(n => !have.has(n));
 
+    let createdCount = 0;
     if (missing.length) {
         console.log(`[PROMOTE] Creating ${missing.length} missing tickets for raffle ${sale.raffleId}`);
-        await tx.ticket.createMany({
+        const result = await tx.ticket.createMany({
             data: missing.map(n => ({
                 raffleId: sale.raffleId as string,
                 number: n,
@@ -43,15 +44,20 @@ export async function promoteTicketsForSale(tx: any, saleId: string) {
             })),
             skipDuplicates: true,
         });
+        createdCount = result.count;
     }
 
-    // 2) Update all relevant tickets (existing ones that are not SOLD yet)
-    // We update all, even if they were RESERVED or AVAILABLE
-    await tx.ticket.updateMany({
+    // 2) Update all relevant tickets (existing ones that are not SOLD yet, or are already SOLD to this sale)
+    // We update all to ensure they are properly linked and marked as SOLD at this moment.
+    // However, we MUST NOT hijack tickets that are SOLD to ANOTHER sale.
+    const updateResult = await tx.ticket.updateMany({
         where: {
             raffleId: sale.raffleId,
             number: { in: numbers },
-            // Important: we re-link them to the sale just in case
+            OR: [
+                { status: { not: TicketStatus.SOLD } },
+                { saleId: sale.id }
+            ]
         },
         data: {
             status: TicketStatus.SOLD,
@@ -61,6 +67,16 @@ export async function promoteTicketsForSale(tx: any, saleId: string) {
             sessionId: null
         },
     });
+
+    const promotedCount = createdCount + updateResult.count;
+    console.log(`[PROMOTE] Success: ${promotedCount}/${numbers.length} tickets promoted for sale ${saleId}`);
+
+    if (promotedCount < numbers.length) {
+        const missingCount = numbers.length - promotedCount;
+        const msg = `GHOST_SALE_ERROR: No se pudieron promover ${missingCount} de ${numbers.length} tickets. Posible conflicto de reserva o venta duplicada.`;
+        console.error(`[PROMOTE] FATAL: ${msg} | saleId=${saleId}`);
+        throw new Error(msg);
+    }
 
     const finalNumbers = numbers.map(n => String(n).padStart(4, "0"));
 

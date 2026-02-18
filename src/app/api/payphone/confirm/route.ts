@@ -81,10 +81,14 @@ export async function POST(req: Request) {
         const isCanceled = data.statusCode === 2;
 
         if (isPaid) {
-            // ✅ LEY 0 - CASO: PAGO NUEVO -> Validar Tickets antes de marcar PAID
+            // ✅ LEY 0 - ESTRATEGIA A: PROMOVER PRIMERO
             try {
                 const payload = await prisma.$transaction(async (tx) => {
-                    // 1. [Snapshot] Update Sale status to PAID
+                    // 1. [L0] Promote tickets to SOLD definitively
+                    // Si falla (ej: números robados), lanzará GHOST_SALE_ERROR y hará rollback
+                    const ticketNumbers = await promoteTicketsForSale(tx, sale.id);
+
+                    // 2. [Snapshot] Update Sale status to PAID
                     const updatedSale = await tx.sale.update({
                         where: { id: sale.id },
                         data: {
@@ -97,15 +101,12 @@ export async function POST(req: Request) {
                         include: { customer: true }
                     });
 
-                    // 2. [L0] Promote tickets to SOLD definitively
-                    const ticketNumbers = await promoteTicketsForSale(tx, sale.id);
-
                     return { sale: updatedSale, ticketNumbers };
                 }, { timeout: 15000 });
 
                 const ticketNumbers = payload.ticketNumbers;
                 const customer = payload.sale.customer;
-                console.log(`[SNAPSHOT] saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
+                console.log(`[CONFIRM] SUCCESS: saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
 
                 // Email (best effort)
                 try {
@@ -133,8 +134,18 @@ export async function POST(req: Request) {
                 });
 
             } catch (error: any) {
-                if (error.message.startsWith('GHOST_SALE_ERROR')) {
-                    console.error(`[GHOST] saleId=${sale.id} error=${error.message}`);
+                console.error(`[CONFIRM] FATAL ERROR for sale ${sale.id}:`, error.message);
+
+                // Guardar error en la venta para auditoría admin
+                await prisma.sale.update({
+                    where: { id: sale.id },
+                    data: {
+                        lastError: error.message,
+                        lastErrorAt: new Date()
+                    } as any
+                }).catch(e => console.error("[AUDIT] Falló al guardar error en DB:", e));
+
+                if (error.message.includes('GHOST_SALE_ERROR')) {
                     return NextResponse.json({
                         ok: false,
                         code: 'GHOST_SALE',

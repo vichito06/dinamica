@@ -83,6 +83,8 @@ model Sale {
   requestedNumbers          String[]        @default([])
   ticketNumbers             String[]        @default([])
   lastEmailSentAt           DateTime?
+  lastError                 String?
+  lastErrorAt               DateTime?
   raffleId                  String?
   raffle                    Raffle?         @relation(fields: [raffleId], references: [id])
 
