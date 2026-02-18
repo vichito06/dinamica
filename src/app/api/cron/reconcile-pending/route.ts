@@ -16,10 +16,14 @@ export async function GET(req: Request) {
     const auth = req.headers.get("authorization") ?? "";
     const secretHeader = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
-    const authorized = !!expected && (secretQuery === expected || secretHeader === expected);
+    const authorized =
+        expected.length > 0 && (secretQuery === expected || secretHeader === expected);
 
     if (!authorized) {
-        console.error("[CRON] unauthorized", { hasQuery: !!secretQuery, hasHeader: !!secretHeader });
+        console.error("[CRON] unauthorized", {
+            hasQuery: !!secretQuery,
+            hasHeader: !!secretHeader,
+        });
         return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
 
@@ -28,6 +32,9 @@ export async function GET(req: Request) {
         return NextResponse.json({ ok: true, ...result });
     } catch (err: any) {
         console.error("[CRON] Crash:", err);
-        return NextResponse.json({ ok: false, error: err?.message ?? "cron_failed" }, { status: 500 });
+        return NextResponse.json(
+            { ok: false, error: err?.message ?? "cron_failed" },
+            { status: 500 }
+        );
     }
 }
