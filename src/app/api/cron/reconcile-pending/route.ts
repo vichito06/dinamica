@@ -4,10 +4,6 @@ import { reconcilePendingSales } from "@/lib/reconciliation";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/cron/reconcile-pending?secret=...
- * Protegido por CRON_SECRET (query o Authorization: Bearer)
- */
 export async function GET(req: Request) {
     const url = new URL(req.url);
 
