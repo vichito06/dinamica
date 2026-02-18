@@ -279,23 +279,36 @@ export async function GET(request: Request) {
             take: 100
         });
 
-        const formattedSales = sales.map(s => ({
-            id: s.id,
-            total: (s.amountCents || 0) / 100,
-            status: s.status,
-            date: s.createdAt,
-            customerId: s.customerId,
-            customer: s.customer ? {
-                id: s.customer.id,
-                firstName: s.customer.firstName,
-                lastName: s.customer.lastName,
-                fullName: `${s.customer.lastName || ''} ${s.customer.firstName || ''}`.trim() || 'S/N',
-                email: s.customer.email,
-                phone: s.customer.phone,
-                idNumber: s.customer.idNumber
-            } : null,
-            tickets: (s.tickets || []).map(t => t.number.toString().padStart(4, '0'))
-        }));
+        const formattedSales = sales.map(s => {
+            const soldTickets = (s.tickets || []).filter(t => t.status === 'SOLD');
+            const ticketCount = soldTickets.length || s.requestedNumbers?.length || 0;
+
+            return {
+                id: s.id,
+                total: (s.amountCents || 0) / 100,
+                status: s.status,
+                date: s.createdAt,
+                customerId: s.customerId,
+                customer: s.customer ? {
+                    id: s.customer.id,
+                    firstName: s.customer.firstName,
+                    lastName: s.customer.lastName,
+                    fullName: `${s.customer.lastName || ''} ${s.customer.firstName || ''}`.trim() || 'S/N',
+                    email: s.customer.email,
+                    phone: s.customer.phone,
+                    idNumber: s.customer.idNumber
+                } : null,
+                // [LAW 3] Derive data from Ticket table, fallback to snapshot for UI awareness
+                tickets: soldTickets.length > 0
+                    ? soldTickets.map(t => t.number.toString().padStart(4, '0'))
+                    : (s.requestedNumbers || []),
+                ticketCount: soldTickets.length,
+                requestedCount: s.requestedNumbers?.length || 0,
+                isGhost: s.status === 'PAID' && soldTickets.length === 0,
+                emailSent: !!s.lastEmailSentAt,
+                lastError: s.lastError
+            };
+        });
 
         return NextResponse.json(formattedSales);
 

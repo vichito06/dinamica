@@ -15,7 +15,7 @@ export interface ReconcileResult {
 
 /**
  * Reconcilia una venta individual con PayPhone.
- * Implementa la estrategia Promote-First.
+ * Implementa la Ley de Atominicidad: Promote First -> Verify -> Mark PAID.
  */
 export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
     const sale = await prisma.sale.findUnique({
@@ -27,15 +27,18 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
         return { ok: false, status: 'NOT_FOUND', saleId, ticketNumbers: [], error: 'Sale not found' };
     }
 
+    // 0. Si ya está PAID, intentar promover por si quedó en "Limbo" (Idempotencia)
     if (sale.status === SaleStatus.PAID) {
-        // Idempotencia: Intentar promover si por alguna razón no se hizo
         try {
             const ticketNumbers = await prisma.$transaction(async (tx) => {
                 return await promoteTicketsForSale(tx, sale.id);
             });
+
+            // Si ya está pagado pero no se ha enviado el email, podemos intentar re-enviarlo aquí
+            // (Opcional, pero robusto)
             return { ok: true, status: 'PAID', saleId: sale.id, ticketNumbers, alreadyPaid: true };
         } catch (err: any) {
-            return { ok: true, status: 'PAID', saleId: sale.id, ticketNumbers: [], alreadyPaid: true, error: err.message };
+            return { ok: true, status: 'PAID', saleId: sale.id, ticketNumbers: [], alreadyPaid: true, error: `Ya pagado, pero error al sincronizar tickets: ${err.message}` };
         }
     }
 
@@ -43,35 +46,51 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
         return { ok: false, status: 'INCOMPLETE', saleId, ticketNumbers: [], error: 'Missing PayPhone data' };
     }
 
-    // 1. Consultar PayPhone S2S
+    // 1. Consultar PayPhone S2S (Definitivo)
+    console.log(`[Reconcile] Querying PayPhone for sale ${sale.id}...`);
     const confirmResult: PayPhoneConfirmResult = await confirmPayphonePayment(sale.payphonePaymentId, sale.clientTransactionId);
 
     if (confirmResult.status === 'APPROVED') {
         try {
-            // 2. Transacción Promote-First
+            // 2. Transacción Atómica de Blindaje
             const ticketNumbers = await prisma.$transaction(async (tx) => {
-                // a) Asegurar tickets
+                console.log(`[Reconcile] Starting Atomic Transaction for sale ${sale.id}`);
+
+                // a) PROMOCIÓN (Snapshot -> SOLD)
+                // Esta función lanza error si no puede promover el 100%
                 const promoted = await promoteTicketsForSale(tx, sale.id);
 
-                // b) Marcar PAID
+                // b) VERIFICACIÓN DE SEGURIDAD (Doble Check)
+                const soldCount = await tx.ticket.count({
+                    where: { saleId: sale.id, status: TicketStatus.SOLD }
+                });
+
+                if (soldCount === 0 || soldCount < sale.requestedNumbers.length) {
+                    throw new Error(`CONCURRENCY_ERROR: Solo se encontraron ${soldCount} tickets vendidos de ${sale.requestedNumbers.length} solicitados.`);
+                }
+
+                // c) MARCADO PAID
                 await tx.sale.update({
                     where: { id: sale.id },
                     data: {
                         status: SaleStatus.PAID,
                         confirmedAt: new Date(),
                         payphoneStatusCode: 3,
-                        payphoneAuthorizationCode: confirmResult.transactionId || 'S2S'
+                        payphoneAuthorizationCode: confirmResult.transactionId || 'S2S',
+                        lastError: null,
+                        lastErrorAt: null
                     } as any
                 });
 
                 return promoted;
-            }, { timeout: 20000 });
+            }, { timeout: 25000 });
 
-            console.log(`[Reconcile] SUCCESS for sale ${sale.id}. Tickets: ${ticketNumbers.length}`);
+            console.log(`[Reconcile] SUCCESS: Sale ${sale.id} is now PAID with ${ticketNumbers.length} tickets.`);
 
-            // 3. Email (Best effort)
-            if (sale.customer) {
+            // 3. Email de Confirmación (Post-Transacción, Idempotente)
+            if (sale.customer && !sale.lastEmailSentAt) {
                 try {
+                    console.log(`[EMAIL] Attempting confirm email for sale ${sale.id} to ${sale.customer.email}`);
                     await sendTicketsEmail({
                         to: sale.customer.email,
                         customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
@@ -79,19 +98,27 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
                         tickets: ticketNumbers,
                         total: sale.amountCents / 100
                     });
+
                     await prisma.sale.update({
                         where: { id: sale.id },
                         data: { lastEmailSentAt: new Date() } as any
                     });
-                } catch (e) {
-                    console.error(`[Reconcile] Email failed for sale ${sale.id}:`, e);
+                    console.log(`[EMAIL] SUCCESS for sale ${sale.id}`);
+                } catch (e: any) {
+                    console.error(`[EMAIL] FAILED for sale ${sale.id}:`, e.message);
+                    await prisma.sale.update({
+                        where: { id: sale.id },
+                        data: { lastError: `EMAIL_FAILED: ${e.message}`, lastErrorAt: new Date() } as any
+                    }).catch(() => { });
                 }
             }
 
             return { ok: true, status: 'APPROVED', saleId: sale.id, ticketNumbers };
 
         } catch (error: any) {
-            console.error(`[Reconcile] Promotion failed for sale ${sale.id}:`, error.message);
+            console.error(`[Reconcile] CRITICAL FAILURE for sale ${sale.id}:`, error.message);
+
+            // Registrar el error en la venta para el Admin
             await prisma.sale.update({
                 where: { id: sale.id },
                 data: { lastError: error.message, lastErrorAt: new Date() } as any

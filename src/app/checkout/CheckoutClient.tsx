@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw, XCircle } from 'lucide-react';
+import { CreditCard, Lock, Check, Mail, Phone, User, ArrowLeft, ArrowRight, MapPin, Globe, Hash, Building, AlertCircle, RefreshCw, XCircle, ExternalLink } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { wasHardReload } from '@/lib/navigation';
 import Image from 'next/image';
@@ -58,6 +58,7 @@ export default function CheckoutClient() {
         paymentMethod: 'payphone'
     });
     const [isReserving, setIsReserving] = useState(false);
+    const [lastCreatedSaleId, setLastCreatedSaleId] = useState<string | null>(null);
     const [reserveError, setReserveError] = useState<string | null>(null);
     const searchParams = useSearchParams();
     const hasReleasedOnMount = useRef(false);
@@ -295,6 +296,7 @@ export default function CheckoutClient() {
             const saleId = saleData.id || saleData.saleId || saleData.sale?.id;
             if (!saleId) throw new Error("No se pudo obtener el ID de la venta.");
 
+            setLastCreatedSaleId(saleId);
             setDebugInfo(prev => ({ ...prev, step: 'PREPARE', saleId }));
 
             // 3. PREPARE PAYPHONE
@@ -321,6 +323,21 @@ export default function CheckoutClient() {
 
             if (isDebugMode) console.log("[Checkout] Redirecting to PayPhone:", paymentUrl);
             setDebugInfo(prev => ({ ...prev, step: 'REDIRECT', urlDetected: true }));
+
+            // [SEV-MOBILE] Persistencia Cross-Tab/Session para Safari
+            try {
+                localStorage.setItem("pp_last_saleId", saleId);
+                const payphoneId = String(data?.id || data?.paymentId || "");
+                if (payphoneId) localStorage.setItem("pp_last_paymentId", payphoneId);
+
+                // Cookies fallback (path=/ para que sea global)
+                document.cookie = `pp_last_saleId=${encodeURIComponent(saleId)}; path=/; max-age=86400; samesite=lax; secure`;
+                if (payphoneId) {
+                    document.cookie = `pp_last_paymentId=${encodeURIComponent(payphoneId)}; path=/; max-age=86400; samesite=lax; secure`;
+                }
+            } catch (e) {
+                console.error("[Checkout] Error saving persistence", e);
+            }
 
             // Give 500ms for user to see the debug info if in debug mode
             if (isDebugMode) {
@@ -561,6 +578,7 @@ export default function CheckoutClient() {
                                     onSubmit={handlePersonalDataSubmit}
                                     loading={isReserving || isPaying}
                                     selectedNumbers={selectedNumbers}
+                                    lastSaleId={lastCreatedSaleId}
                                 />
                             )}
 
@@ -646,7 +664,7 @@ function StepIndicator({ number, title, active, completed }: any) {
 }
 
 // Personal Data Form
-function PersonalDataForm({ data, setData, onSubmit, loading, selectedNumbers }: any) {
+function PersonalDataForm({ data, setData, onSubmit, loading, selectedNumbers, lastSaleId }: any) {
     const router = useRouter();
     const isEcuador = data.country === 'Ecuador';
 
@@ -809,24 +827,41 @@ function PersonalDataForm({ data, setData, onSubmit, loading, selectedNumbers }:
                 </div>
 
                 <div className="flex gap-4 items-center">
-                    {/* Back button removed from here */}
-                    <button
-                        type="submit"
-                        disabled={loading || !selectedNumbers || selectedNumbers.length === 0}
-                        className="flex-1 py-4 bg-white text-black font-bold rounded-xl hover:shadow-lg hover:shadow-white/30 transition-all duration-300 hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <>
-                                <RefreshCw className="w-5 h-5 animate-spin" />
-                                Reservando...
-                            </>
-                        ) : (
-                            <>
-                                Continuar al Pago
-                                <ArrowRight className="w-5 h-5" />
-                            </>
+                    {/* Submit Button */}
+                    <div className="w-full mt-10">
+                        {loading && lastSaleId && (
+                            <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-xl text-center">
+                                <p className="text-white/60 text-xs mb-2">¿PayPhone se quedó cargando?</p>
+                                <Link
+                                    href={`/checkout/success?saleId=${lastSaleId}`}
+                                    className="text-orange-400 font-bold hover:underline flex items-center justify-center gap-1"
+                                >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Recuperar comprobante aquí
+                                </Link>
+                            </div>
                         )}
-                    </button>
+                        <button
+                            type="submit"
+                            disabled={loading || selectedNumbers.length === 0}
+                            className={`w-full py-5 rounded-2xl font-bold text-xl transition-all flex items-center justify-center gap-3 relative overflow-hidden group ${loading
+                                ? 'bg-white/10 text-white/40 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:shadow-[0_0_30px_rgba(249,115,22,0.3)] active:scale-[0.98]'
+                                }`}
+                        >
+                            {loading ? (
+                                <>
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    Reservando...
+                                </>
+                            ) : (
+                                <>
+                                    Continuar al Pago
+                                    <ArrowRight className="w-5 h-5" />
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
             </form>
         </motion.div >

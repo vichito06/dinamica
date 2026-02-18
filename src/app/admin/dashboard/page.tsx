@@ -26,9 +26,11 @@ import {
     Trophy,
     Sparkles,
     ArrowLeft,
-    Loader2,
     Calendar,
-    ArrowRight
+    ArrowRight,
+    RefreshCw,
+    Mail,
+    Loader2
 } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -541,7 +543,16 @@ function SalesView() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-white font-bold">{sale.tickets.length}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-3">
+                                            {sale.isGhost && (
+                                                <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-[10px] font-bold rounded-full border border-red-500/30 animate-pulse">
+                                                    GHOST
+                                                </span>
+                                            )}
+                                            <span className="text-white font-bold">{sale.tickets.length}</span>
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 text-white text-sm">
                                         <div className="flex flex-wrap gap-1 max-w-[240px]">
                                             {sale.tickets.slice(0, 3).map((t: string) => (
@@ -628,6 +639,53 @@ function SalesView() {
                                 </button>
                             </div>
                         </div>
+
+                        {/* Repair / Resend Action Bar */}
+                        {selectedSale.status === 'PAID' && (
+                            <div className="px-8 py-3 bg-white/5 border-b border-white/10 flex flex-wrap gap-4 items-center">
+                                <span className="text-xs text-white/40 uppercase font-bold tracking-wider">Acciones de Soporte:</span>
+
+                                {selectedSale.isGhost && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('¿Intentar reparar esta venta "fantasma"? Se promoverán tickets usando el snapshot.')) return;
+                                            try {
+                                                const res = await fetch('/api/admin/repair-sale', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ saleId: selectedSale.id })
+                                                });
+                                                const data = await res.json();
+                                                if (data.ok) {
+                                                    alert(data.message);
+                                                    loadSales();
+                                                    setSelectedSale(null);
+                                                } else {
+                                                    alert('Error: ' + data.error);
+                                                }
+                                            } catch (e) { alert('Error de red'); }
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all text-xs font-bold shadow-lg shadow-orange-900/20"
+                                    >
+                                        <RefreshCw className="w-3.5 h-3.5" /> REPARAR GHOST SALE
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const res = await fetch(`/api/admin/sales/${selectedSale.id}/resend-email`, { method: 'POST' });
+                                            const data = await res.json();
+                                            if (data.ok) alert('Correo reenviado!');
+                                            else alert('Error: ' + (data.error || data.detail));
+                                        } catch (e) { alert('Error de red'); }
+                                    }}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-white/10 text-white border border-white/20 rounded-lg hover:bg-white/20 transition-all text-xs font-medium"
+                                >
+                                    <Mail className="w-3.5 h-3.5" /> Reenviar Comprobante
+                                </button>
+                            </div>
+                        )}
 
                         <div className="p-8 overflow-y-auto custom-scrollbar">
                             <div className="grid md:grid-cols-2 gap-8">
