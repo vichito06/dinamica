@@ -22,18 +22,15 @@ export async function getActiveRaffle(tx?: any): Promise<Raffle> {
             }
         });
 
-        // Seed 9,999 tickets for the new raffle
-        console.log(`[Raffle Lib] Seeding 9,999 tickets for raffle ${activeRaffle.id}...`);
-        const ticketsData = Array.from({ length: 9999 }, (_, i) => ({
-            number: i + 1,
-            status: TicketStatus.AVAILABLE,
-            raffleId: activeRaffle!.id
-        }));
-
-        await client.ticket.createMany({
-            data: ticketsData,
-            skipDuplicates: true
-        });
+        await ensureRaffleInventory(client, activeRaffle.id);
+    } else {
+        // Periodic or conditional check for inventory completeness
+        // For robustness, we check if total tickets match expected range
+        const count = await client.ticket.count({ where: { raffleId: activeRaffle.id } });
+        if (count < 9999) {
+            console.warn(`[Raffle Lib] Raffle ${activeRaffle.id} has partial inventory (${count}/9999). Repairing...`);
+            await ensureRaffleInventory(client, activeRaffle.id);
+        }
     }
 
     return activeRaffle;
@@ -45,4 +42,37 @@ export async function getActiveRaffle(tx?: any): Promise<Raffle> {
 export async function getActiveRaffleId(tx?: any): Promise<string> {
     const raffle = await getActiveRaffle(tx);
     return raffle.id;
+}
+
+export async function ensureRaffleInventory(tx: any, raffleId: string) {
+    const existing = await tx.ticket.findMany({
+        where: { raffleId },
+        select: { number: true }
+    });
+    const have = new Set(existing.map((t: any) => t.number));
+    const missing: number[] = [];
+
+    for (let n = 1; n <= 9999; n++) {
+        if (!have.has(n)) missing.push(n);
+    }
+
+    if (missing.length > 0) {
+        console.log(`[SEED] Backfilling ${missing.length} missing tickets for raffle ${raffleId}`);
+        const chunks = [];
+        for (let i = 0; i < missing.length; i += 1000) {
+            chunks.push(missing.slice(i, i + 1000));
+        }
+
+        for (const chunk of chunks) {
+            await tx.ticket.createMany({
+                data: chunk.map(n => ({
+                    raffleId,
+                    number: n,
+                    status: 'AVAILABLE'
+                })),
+                skipDuplicates: true
+            });
+        }
+    }
+    return missing.length;
 }

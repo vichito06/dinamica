@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { SaleStatus, TicketStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 import { sendTicketsEmail } from "@/lib/email";
-import { recoverAndFixTicketNumbers } from "@/lib/ticketNumbersRecovery";
+import { promoteTicketsForSale } from "@/lib/ticketPromotion";
+import { getActiveRaffleId } from "@/lib/raffle";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -83,16 +84,8 @@ export async function POST(req: Request) {
         if (isPaid) {
             // ✅ LEY 0 - CASO: PAGO NUEVO -> Validar Tickets antes de marcar PAID
             try {
-                const recoveryResult = await prisma.$transaction(async (tx) => {
-                    // 1. Intentar recuperar/reparar tickets
-                    const rec = await recoverAndFixTicketNumbers(tx, sale.id);
-
-                    if (!rec.ok) {
-                        // [GHOST] Abortar transacción si no hay evidencia
-                        throw new Error(`GHOST_SALE_ERROR:${rec.reason}`);
-                    }
-
-                    // 2. [SNAPSHOT] Guardar estado PAID y números en la MISMA transacción
+                const payload = await prisma.$transaction(async (tx) => {
+                    // 1. [Snapshot] Update Sale status to PAID
                     const updatedSale = await tx.sale.update({
                         where: { id: sale.id },
                         data: {
@@ -101,16 +94,18 @@ export async function POST(req: Request) {
                             payphoneStatusCode: data.statusCode,
                             payphoneAuthorizationCode: String(data.authorizationCode || ''),
                             payphonePaymentId: String(id),
-                            ticketNumbers: rec.ticketNumbers // Snapshot definitivo
                         } as any,
                         include: { customer: true }
                     });
 
-                    return { ...rec, sale: updatedSale };
+                    // 2. [L0] Promote tickets to SOLD definitively
+                    const ticketNumbers = await promoteTicketsForSale(tx, sale.id);
+
+                    return { sale: updatedSale, ticketNumbers };
                 }, { timeout: 15000 });
 
-                const ticketNumbers = recoveryResult.ticketNumbers;
-                const customer = recoveryResult.sale.customer;
+                const ticketNumbers = payload.ticketNumbers;
+                const customer = payload.sale.customer;
                 console.log(`[SNAPSHOT] saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
 
                 // Email (best effort)

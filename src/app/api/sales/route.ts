@@ -16,21 +16,8 @@ export async function POST(request: Request) {
         } catch (e) { }
 
         const body = await request.json();
-        const { personalData, ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, total, sessionId } = body;
-        const tickets = bodyTicketNumbers || bodyTickets;
-
-        // 1. Validation & sanitization
-        if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
-            return NextResponse.json({ ok: false, error: 'No tickets selected', code: 'INVALID_INPUT', requestId }, { status: 400 });
-        }
-
-        const ticketNumbers = tickets
-            .map((t: any) => parseInt(t, 10))
-            .filter(n => !isNaN(n));
-
-        if (ticketNumbers.length === 0) {
-            return NextResponse.json({ ok: false, error: 'Lista de tickets inválida.', code: 'INVALID_TICKETS', requestId }, { status: 400 });
-        }
+        const { personalData, ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, total, sessionId, mode } = body;
+        let tickets = bodyTicketNumbers || bodyTickets;
 
         // 2. Transaction: Verify Availability + Create Customer/Sale + Reserve
         const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -43,7 +30,38 @@ export async function POST(request: Request) {
                 throw new Error('NO_ACTIVE_RAFFLE:No hay un sorteo activo en este momento.');
             }
 
-            // Check availability
+            let ticketNumbers: number[] = [];
+
+            if (mode === 'random') {
+                const count = tickets && Array.isArray(tickets) ? tickets.length : (parseInt(tickets) || 1);
+                // Proper server-side random selection
+                const availablePicks: any[] = await tx.$queryRaw`
+                    SELECT "number" FROM "Ticket" 
+                    WHERE "raffleId" = ${activeRaffle.id} 
+                    AND "status" = 'AVAILABLE'
+                    ORDER BY RANDOM()
+                    LIMIT ${count};
+                `;
+                ticketNumbers = availablePicks.map(p => p.number);
+
+                if (ticketNumbers.length < count) {
+                    throw new Error(`DISPONIBILIDAD: Solo quedan ${ticketNumbers.length} tickets disponibles.`);
+                }
+            } else {
+                // Normal mode: strictly use numbers from user
+                if (!tickets || !Array.isArray(tickets) || tickets.length === 0) {
+                    throw new Error('INVALID_INPUT:No se seleccionaron tickets.');
+                }
+                ticketNumbers = tickets
+                    .map((t: any) => parseInt(t, 10))
+                    .filter(n => !isNaN(n));
+
+                if (ticketNumbers.length === 0) {
+                    throw new Error('INVALID_TICKETS:Lista de tickets inválida.');
+                }
+            }
+
+            // 2.2 Check availability for manual picks
             const existingTickets = await tx.ticket.findMany({
                 where: {
                     number: { in: ticketNumbers },
@@ -53,16 +71,19 @@ export async function POST(request: Request) {
 
             const now = new Date();
             const reservedStatus = (TicketStatus as any).RESERVED || "RESERVED";
-            const unavailable = existingTickets.filter(t =>
-                t.status === TicketStatus.SOLD ||
-                (t.status === reservedStatus &&
-                    t.reservedUntil && t.reservedUntil > now &&
-                    t.sessionId !== sessionId)
-            );
 
-            if (unavailable.length > 0) {
-                const unavailableNumbers = unavailable.map(t => t.number).join(', ');
-                throw new Error(`DISPONIBILIDAD:${unavailableNumbers}`);
+            if (mode !== 'random') {
+                const unavailable = existingTickets.filter(t =>
+                    t.status === TicketStatus.SOLD ||
+                    (t.status === reservedStatus &&
+                        t.reservedUntil && t.reservedUntil > now &&
+                        t.sessionId !== sessionId)
+                );
+
+                if (unavailable.length > 0) {
+                    const unavailableNumbers = unavailable.map(t => t.number).join(', ');
+                    throw new Error(`DISPONIBILIDAD:${unavailableNumbers}`);
+                }
             }
 
             // Handle Customer (Upsert by Cédula)
