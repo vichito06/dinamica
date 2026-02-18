@@ -129,6 +129,13 @@ export async function POST(request: Request) {
                 }
             });
 
+            // Stabilize clientTransactionId (Law 0) - "Ideal: el mismo saleId"
+            const clientTxId = sale.id;
+            await tx.sale.update({
+                where: { id: sale.id },
+                data: { clientTransactionId: clientTxId }
+            });
+
             // Hold Tickets (anti-duplicate) - Bulk optimization
             const existingNumbers = existingTickets.map((t: { number: number }) => t.number);
             const missingNumbers = ticketNumbers.filter((num: number) => !existingNumbers.includes(num));

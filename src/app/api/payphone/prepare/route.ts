@@ -118,8 +118,9 @@ export async function POST(req: Request) {
         const isUserAdmin = session && session === secret;
         const tip = 0;
 
-        // Use a robust clientTransactionId (fixed to 16 chars)
-        const clientTransactionId = (sale.clientTransactionId || `S${sale.id}_${Date.now()} `).slice(0, 16);
+        // Use a robust clientTransactionId
+        // [LAW 0] "Ideal: el mismo saleId"
+        const clientTransactionId = sale.clientTransactionId || sale.id;
 
         // Payload EXACTO requerido por PayPhone (Debe cumplir: amount = sum of others)
         const payload = {

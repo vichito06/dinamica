@@ -17,6 +17,7 @@ function SuccessContent() {
     const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<string>('PENDING');
     const [pollCount, setPollCount] = useState(0);
+    const [isReconciling, setIsReconciling] = useState(false);
     const maxPolls = 15; // 30 seconds total (2s intervals)
     const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -36,7 +37,8 @@ function SuccessContent() {
                 if (pollTimerRef.current) clearInterval(pollTimerRef.current);
             } else if (data.status === 'ERROR' || data.lastError) {
                 setLoading(false);
-                if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                // Don't clear interval if it's just a lastError but might still be pending? 
+                // Actually, if it has lastError it's probably stuck, but reconcile might fix it.
             }
         } catch (err: any) {
             setError(err.message);
@@ -44,6 +46,30 @@ function SuccessContent() {
             if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         }
     }, [saleId]);
+
+    const handleReconcile = async () => {
+        if (!saleId || isReconciling) return;
+        setIsReconciling(true);
+        try {
+            const res = await fetch('/api/payphone/reconcile', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ saleId })
+            });
+            const data = await res.json();
+            if (data.ok && data.status === 'APPROVED') {
+                await fetchSale();
+            } else if (data.error) {
+                alert(`Estado: ${data.status || 'No detectado'}. ${data.error}`);
+            } else {
+                alert(`El pago aún no aparece como aprobado en PayPhone (${data.status || 'PENDING'}).`);
+            }
+        } catch (e) {
+            alert('Error al intentar recuperar el pago. Intente nuevamente en unos segundos.');
+        } finally {
+            setIsReconciling(false);
+        }
+    };
 
     useEffect(() => {
         if (!saleId) {
@@ -53,6 +79,9 @@ function SuccessContent() {
         }
 
         fetchSale();
+
+        // [SEV-PAYPHONE] Auto-reconcile once on mount to handle mobile redirect failures immediately
+        handleReconcile();
 
         // Polling if PENDING
         pollTimerRef.current = setInterval(() => {
@@ -164,6 +193,27 @@ function SuccessContent() {
 
                 {/* Support and Actions */}
                 <div className="flex flex-col gap-4">
+                    {/* [SEV-PAYPHONE] Reconciliation Button */}
+                    {(isPending || isError || isTimeout) && !isPaid && (
+                        <button
+                            onClick={handleReconcile}
+                            disabled={isReconciling}
+                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                            {isReconciling ? (
+                                <>
+                                    <RefreshCw className="w-5 h-5 animate-spin" />
+                                    Verificando en PayPhone...
+                                </>
+                            ) : (
+                                <>
+                                    <Check className="w-5 h-5" />
+                                    Ya pagué / Recuperar mis números
+                                </>
+                            )}
+                        </button>
+                    )}
+
                     {isPaid && (
                         <Link
                             href="/"
