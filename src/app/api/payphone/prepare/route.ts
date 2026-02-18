@@ -117,6 +117,18 @@ export async function POST(req: Request) {
         const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
         const isUserAdmin = session && session === secret;
         const tip = 0;
+        const originRaw = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? process.env.VERCEL_URL ?? "";
+        const origin = originRaw.startsWith("http")
+            ? originRaw.trim().replace(/\/+$/, "")
+            : `https://${originRaw.trim().replace(/\/+$/, "")}`;
+
+        // OJO: usa URL() para que nunca metas espacios raros
+        const returnUrl = new URL("/payphone/return", origin);
+        returnUrl.searchParams.set("id", String(sale.payphonePaymentId || "0"));
+        returnUrl.searchParams.set("clientTransactionId", sale.id);
+
+        const cancelUrl = new URL("/checkout/cancel", origin);
+        cancelUrl.searchParams.set("saleId", sale.id);
 
         // Use a robust clientTransactionId
         // [LAW 0] "Ideal: el mismo saleId"
@@ -134,8 +146,8 @@ export async function POST(req: Request) {
             currency: "USD",
             storeId: STORE_ID,
             reference: "Y Voss Oeee — Compra de tickets",
-            responseUrl: `${APP_URL} /payphone/return`,
-            cancellationUrl: `${APP_URL} /payphone/cancel`,
+            responseUrl: returnUrl.toString(),
+            cancellationUrl: cancelUrl.toString(),
             timeZone: -5,
         };
 

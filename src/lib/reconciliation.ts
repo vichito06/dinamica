@@ -113,6 +113,39 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
         ]);
         return { ok: true, status: confirmResult.status, saleId: sale.id, ticketNumbers: [] };
     }
-
     return { ok: true, status: confirmResult.status, saleId: sale.id, ticketNumbers: [] };
+}
+
+/**
+ * Reconcilia ventas PENDING de forma masiva (usado por el CRON)
+ */
+export async function reconcilePendingSales(options: { lookbackHours: number } = { lookbackHours: 24 }) {
+    const twentyFourHoursAgo = new Date(Date.now() - options.lookbackHours * 60 * 60 * 1000);
+
+    const pendingSales = await prisma.sale.findMany({
+        where: {
+            status: SaleStatus.PENDING,
+            createdAt: { gte: twentyFourHoursAgo },
+            payphonePaymentId: { not: null as any },
+            clientTransactionId: { not: null as any }
+        },
+        take: 20
+    });
+
+    console.log(`[Reconcile Batch] Found ${pendingSales.length} candidates.`);
+
+    const results = [];
+    for (const sale of pendingSales) {
+        try {
+            const res = await reconcileSale(sale.id);
+            results.push({ id: sale.id, status: res.status, ok: res.ok });
+        } catch (e) {
+            results.push({ id: sale.id, status: 'CRASH', ok: false });
+        }
+    }
+
+    return {
+        processedCount: pendingSales.length,
+        results
+    };
 }
