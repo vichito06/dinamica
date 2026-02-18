@@ -1,6 +1,6 @@
-// Force deploy at 2026-02-17 22:12
-import { NextResponse } from "next/server";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
-    return NextResponse.json({ ok: true, message: "pong", timestamp: new Date().toISOString() });
+    return Response.json({ ok: true, ts: Date.now() });
 }
