@@ -1,8 +1,8 @@
-
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import crypto from 'crypto';
 import { SaleStatus } from "@prisma/client";
+import { cookies } from "next/headers";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 
 export const maxDuration = 60;
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
 
         // Idempotencia: Si ya tiene un payWithCardUrl y está PENDING, devolverlo
         if (sale.payWithCardUrl && sale.status === SaleStatus.PENDING) {
-            console.log(`[PayPhone Prepare] [${requestId}] Returning cached URL for sale ${saleId}`);
+            console.log(`[PayPhone Prepare][${requestId}] Returning cached URL for sale ${saleId}`);
             return NextResponse.json({
                 ok: true,
                 data: {
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
             return NextResponse.json({
                 ok: false,
                 code: "INVALID_SALE_STATUS",
-                message: `La venta no está pendiente (${sale.status})`,
+                message: `La venta no está pendiente(${sale.status})`,
                 requestId
             }, { status: 400 });
         }
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
             req.headers.get("x-test-secret") === process.env.TEST_SECRET;
 
         if (isAdmin) {
-            console.log(`[PayPhone Prepare] [${requestId}] Calculation: USD:${totalUsd}, Cents:${amountCents}, Qty:${qty}, Price:${ticketPriceCents}`);
+            console.log(`[PayPhone Prepare][${requestId}] Calculation: USD:${totalUsd}, Cents:${amountCents}, Qty:${qty}, Price:${ticketPriceCents} `);
         }
 
         // Validación mínima: PayPhone requiere al menos $1
@@ -112,10 +112,14 @@ export async function POST(req: Request) {
         const amountWithTax = 0;
         const tax = 0;
         const service = 0;
+        const jar = await cookies();
+        const session = jar.get('admin_session')?.value ?? jar.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+        const isUserAdmin = session && session === secret;
         const tip = 0;
 
         // Use a robust clientTransactionId (fixed to 16 chars)
-        const clientTransactionId = (sale.clientTransactionId || `S${sale.id}_${Date.now()}`).slice(0, 16);
+        const clientTransactionId = (sale.clientTransactionId || `S${sale.id}_${Date.now()} `).slice(0, 16);
 
         // Payload EXACTO requerido por PayPhone (Debe cumplir: amount = sum of others)
         const payload = {
@@ -129,10 +133,15 @@ export async function POST(req: Request) {
             currency: "USD",
             storeId: STORE_ID,
             reference: "Y Voss Oeee — Compra de tickets",
-            responseUrl: `${APP_URL}/payphone/return`,
-            cancellationUrl: `${APP_URL}/payphone/cancel`,
+            responseUrl: `${APP_URL} /payphone/return`,
+            cancellationUrl: `${APP_URL} /payphone/cancel`,
             timeZone: -5,
         };
+
+        // Admin override for testing
+        if (isUserAdmin && body.testMode) {
+            console.log("[PayPhone Prepare] Admin test mode detected");
+        }
 
         // Llamada a PayPhone usando Axios con reintentos
         const result = await payphoneRequestWithRetry({
@@ -142,7 +151,7 @@ export async function POST(req: Request) {
         }, 2, requestId);
 
         if (!result.ok) {
-            console.error(`[PayPhone Prepare] [${requestId}] Request failed. Status: ${result.status}`);
+            console.error(`[PayPhone Prepare][${requestId}] Request failed.Status: ${result.status} `);
 
             return NextResponse.json({
                 ok: false,
@@ -184,7 +193,7 @@ export async function POST(req: Request) {
         });
 
     } catch (error: any) {
-        console.error(`[PayPhone Prepare API] [${requestId}] Crash:`, error);
+        console.error(`[PayPhone Prepare API][${requestId}] Crash: `, error);
 
         const isAdmin = req.headers.get("cookie")?.includes("admin_auth=true") ||
             req.headers.get("x-test-secret") === process.env.TEST_SECRET;

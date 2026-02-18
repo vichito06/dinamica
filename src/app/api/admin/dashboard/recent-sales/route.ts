@@ -1,12 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { SaleStatus } from "@prisma/client";
+import { cookies } from "next/headers";
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
     try {
+        const jar = await cookies();
+        const session = jar.get('admin_session')?.value ?? jar.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+
+        if (!session || session !== secret) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const { searchParams } = new URL(req.url);
         const limit = parseInt(searchParams.get('limit') || '10', 10);
 

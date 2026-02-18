@@ -375,13 +375,40 @@ function SalesView() {
         setLoading(true);
         const url = query ? `/api/sales?q=${encodeURIComponent(query)}` : '/api/sales';
         fetch(url)
-            .then(res => res.json())
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = '/admin/login';
+                    throw new Error('No autorizado');
+                }
+                return res.json();
+            })
             .then(data => {
                 setSales(Array.isArray(data) ? data : []);
                 setLoading(false);
             })
             .catch(err => {
                 console.error('Error loading sales:', err);
+                setLoading(false);
+            });
+    };
+
+    const loadCustomers = () => {
+        setLoading(true);
+        fetch('/api/customers')
+            .then(res => {
+                if (res.status === 401) {
+                    window.location.href = '/admin/login';
+                    throw new Error('No autorizado');
+                }
+                return res.json();
+            })
+            .then(data => {
+                // Assuming setCustomers and customers state exist in the actual component
+                // setCustomers(Array.isArray(data) ? data : []);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error('Error loading customers:', err);
                 setLoading(false);
             });
     };

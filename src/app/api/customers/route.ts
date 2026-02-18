@@ -11,9 +11,10 @@ import { cookies } from 'next/headers';
 export async function GET() {
     try {
         const cookieStore = await cookies();
-        const isAdmin = cookieStore.get('admin_auth')?.value === 'true';
+        const session = cookieStore.get('admin_session')?.value ?? cookieStore.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
 
-        if (!isAdmin) {
+        if (!session || session !== secret) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -53,17 +54,17 @@ export async function GET() {
             // Let's stick to PAID for "Total" and "Tickets", but maybe show pending in a separate way?
             // For simplicity and "real money", let's count PAID.
 
-            const realSales = c.sales.filter(s => s.status === SaleStatus.PAID);
+            const realSales = (c.sales || []).filter(s => s.status === SaleStatus.PAID);
 
-            const totalCents = realSales.reduce((sum, sale) => sum + sale.amountCents, 0);
-            const totalTickets = realSales.reduce((sum, sale) => sum + sale.tickets.length, 0);
+            const totalCents = realSales.reduce((sum, sale) => sum + (sale.amountCents || 0), 0);
+            const totalTickets = realSales.reduce((sum, sale) => sum + (sale.tickets?.length || 0), 0);
 
             return {
                 id: c.id,
-                fullName: `${c.lastName} ${c.firstName}`,
-                email: c.email,
-                idNumber: c.idNumber,
-                phone: c.phone,
+                fullName: `${c.lastName || ''} ${c.firstName || ''}`.trim() || 'S/N',
+                email: c.email || 'S/N',
+                idNumber: c.idNumber || 'S/N',
+                phone: c.phone || 'S/N',
                 province: '',
                 country: 'Ecuador',
                 stats: {

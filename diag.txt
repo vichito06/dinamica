@@ -1,0 +1,11 @@
+﻿--- DEEP DIAGNOSTIC START ---
+Total Raffles: 1
+- [ACTIVE] Sorteo Inicial (cmlr2yzag0000vt2o4t43aty0)
+Total Sales: 3
+Sales in Active Raffle (cmlr2yzag0000vt2o4t43aty0): 3
+  Sale cmlrbmo5g0003lb04uxntze7w: Status=PAID, Customer=LL LL, Tickets=20
+  Sale cmlrazn5o0003lb04okiobiuw: Status=PAID, Customer=LL LL, Tickets=10
+  Sale cmlr50mhl0003lf04kohybu2k: Status=PAID, Customer=SEBASTIAN AVILA, Tickets=10
+Orphan Sales (null raffleId): 0
+Tickets: Total=9999, Sold=35, Reserved=5
+--- DEEP DIAGNOSTIC END ---

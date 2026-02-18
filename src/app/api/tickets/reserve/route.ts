@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { TicketStatus } from '@prisma/client';
+import { Prisma, TicketStatus } from '@prisma/client';
+import { cookies } from 'next/headers';
 
 // Explicitly set max duration for long-running transactions (Vercel Support)
 export const maxDuration = 60;
@@ -15,6 +16,11 @@ export async function POST(request: Request) {
         try {
             requestId = (globalThis as any).crypto?.randomUUID?.() || requestId;
         } catch (e) { }
+
+        const jar = await cookies();
+        const session = jar.get('admin_session')?.value ?? jar.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+        const isAdmin = session && session === secret;
 
         const body = await request.json();
         const { ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, sessionId } = body;

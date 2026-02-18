@@ -1,12 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "../../../../lib/prisma";
 import { getActiveRaffle } from "@/lib/raffle";
+import { cookies } from "next/headers";
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
     try {
+        const jar = await cookies();
+        const session = jar.get('admin_session')?.value ?? jar.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
+
+        if (!session || session !== secret) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         // 1. Get Active Raffle
         const activeRaffle = await getActiveRaffle();
         const raffleId = activeRaffle.id;

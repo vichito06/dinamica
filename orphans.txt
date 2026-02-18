@@ -1,0 +1,4 @@
+﻿--- ORPHAN CHECK START ---
+Total Sales: 3
+Orphan Sales (no customer relation): 0
+--- ORPHAN CHECK END ---

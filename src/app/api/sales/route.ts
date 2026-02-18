@@ -98,7 +98,6 @@ export async function POST(request: Request) {
                     lastName: personalData.lastName?.toUpperCase(),
                     email: personalData.email,
                     phone: personalData.phone,
-                    province: personalData.province,
                     city: personalData.city,
                 },
                 create: {
@@ -107,7 +106,6 @@ export async function POST(request: Request) {
                     lastName: personalData.lastName?.toUpperCase(),
                     email: personalData.email,
                     phone: personalData.phone,
-                    province: personalData.province,
                     city: personalData.city,
                 },
             });
@@ -216,14 +214,13 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
     try {
-        // SECURITY: Allow access if secret is provided OR if user has an admin session
         const secret = request.headers.get('x-test-secret');
-        const VALID_SECRET = process.env.TEST_SECRET || process.env.PAYPHONE_DEBUG_SECRET;
+        const VALID_SECRET = process.env.ADMIN_SESSION_SECRET || process.env.PAYPHONE_DEBUG_SECRET || process.env.TEST_SECRET;
 
         const cookieStore = await cookies();
-        const isAdmin = cookieStore.get('admin_auth')?.value === 'true';
+        const session = cookieStore.get('admin_session')?.value ?? cookieStore.get('admin_auth')?.value;
 
-        if (!isAdmin && (!secret || secret !== VALID_SECRET)) {
+        if (!session || session !== VALID_SECRET) {
             console.warn(`[Sales API] Unauthorized GET attempt from ${request.headers.get('x-forwarded-for') || 'unknown'}`);
             return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
         }
@@ -241,16 +238,14 @@ export async function GET(request: Request) {
         if (q) {
             const isNumeric = /^\d+$/.test(q);
             if (isNumeric) {
-                // Search by ticket number or ID number (internal query allowed)
                 whereClause = {
                     ...whereClause,
                     OR: [
                         { tickets: { some: { number: parseInt(q) } } },
-                        { customer: { idNumber: { contains: q } } }
+                        { customer: { idNumber: { contains: q, mode: 'insensitive' } } }
                     ]
                 };
             } else {
-                // Search by name or email (internal query allowed)
                 whereClause = {
                     ...whereClause,
                     OR: [
@@ -266,29 +261,28 @@ export async function GET(request: Request) {
             where: whereClause,
             include: {
                 tickets: true,
-                customer: true // Include customer for authorized admin view
+                customer: true
             },
             orderBy: { createdAt: 'desc' },
             take: 100
         });
 
-        // Format for frontend - Return what the Admin Panel expects
         const formattedSales = sales.map(s => ({
             id: s.id,
-            total: s.amountCents / 100,
+            total: (s.amountCents || 0) / 100,
             status: s.status,
             date: s.createdAt,
             customerId: s.customerId,
-            customer: {
+            customer: s.customer ? {
                 id: s.customer.id,
                 firstName: s.customer.firstName,
                 lastName: s.customer.lastName,
-                fullName: `${s.customer.lastName} ${s.customer.firstName}`.trim(),
+                fullName: `${s.customer.lastName || ''} ${s.customer.firstName || ''}`.trim() || 'S/N',
                 email: s.customer.email,
                 phone: s.customer.phone,
                 idNumber: s.customer.idNumber
-            },
-            tickets: s.tickets.map(t => t.number.toString().padStart(4, '0'))
+            } : null,
+            tickets: (s.tickets || []).map(t => t.number.toString().padStart(4, '0'))
         }));
 
         return NextResponse.json(formattedSales);
