@@ -10,8 +10,12 @@ import Image from 'next/image';
 function SuccessContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const saleId = searchParams.get('saleId');
 
+    // Identificadores (saleId de nuestra DB, id/paymentId de PayPhone)
+    const initialSaleId = searchParams.get('saleId');
+    const paymentId = searchParams.get('id') || searchParams.get('paymentId');
+
+    const [saleId, setSaleId] = useState<string | null>(initialSaleId);
     const [sale, setSale] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -21,11 +25,12 @@ function SuccessContent() {
     const maxPolls = 15; // 30 seconds total (2s intervals)
     const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    const fetchSale = useCallback(async () => {
-        if (!saleId) return;
+    const fetchSale = useCallback(async (targetId?: string) => {
+        const idToFetch = targetId || saleId;
+        if (!idToFetch) return;
 
         try {
-            const res = await fetch(`/api/sales/${saleId}`, { cache: 'no-store' });
+            const res = await fetch(`/api/sales/${idToFetch}`, { cache: 'no-store' });
             if (!res.ok) throw new Error('No pudimos encontrar tu pedido.');
 
             const data = await res.json();
@@ -35,10 +40,6 @@ function SuccessContent() {
             if (data.status === 'PAID') {
                 setLoading(false);
                 if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-            } else if (data.status === 'ERROR' || data.lastError) {
-                setLoading(false);
-                // Don't clear interval if it's just a lastError but might still be pending? 
-                // Actually, if it has lastError it's probably stuck, but reconcile might fix it.
             }
         } catch (err: any) {
             setError(err.message);
@@ -48,58 +49,73 @@ function SuccessContent() {
     }, [saleId]);
 
     const handleReconcile = async () => {
-        if (!saleId || isReconciling) return;
+        if ((!saleId && !paymentId) || isReconciling) return;
         setIsReconciling(true);
+        setError(null);
+        setLoading(true);
+
         try {
             const res = await fetch('/api/payphone/reconcile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ saleId })
+                body: JSON.stringify(saleId ? { saleId } : { paymentId })
             });
             const data = await res.json();
-            if (data.ok && data.status === 'APPROVED') {
-                await fetchSale();
-            } else if (data.error) {
-                alert(`Estado: ${data.status || 'No detectado'}. ${data.error}`);
+
+            if (data.ok) {
+                // Si encontramos el saleId (porque entramos por paymentId), lo fijamos
+                if (data.saleId && !saleId) {
+                    setSaleId(data.saleId);
+                }
+                await fetchSale(data.saleId || saleId);
+            } else if (data.code === 'NOT_FOUND') {
+                setError('No encontramos ninguna venta pendiente para este pago.');
             } else {
-                alert(`El pago aún no aparece como aprobado en PayPhone (${data.status || 'PENDING'}).`);
+                // Aún no está aprobado o hubo error
+                if (!saleId) setError('No pudimos recuperar tu compra. Contacta a soporte.');
             }
         } catch (e) {
-            alert('Error al intentar recuperar el pago. Intente nuevamente en unos segundos.');
+            console.error('Reconcile error:', e);
         } finally {
             setIsReconciling(false);
+            setLoading(false);
         }
     };
 
     useEffect(() => {
-        if (!saleId) {
+        if (!saleId && !paymentId) {
             setLoading(false);
-            setError('ID de venta no proporcionado.');
+            setError('Faltan identificadores de transacción (saleId/paymentId).');
             return;
         }
 
-        fetchSale();
+        if (saleId) {
+            fetchSale();
+        }
 
-        // [SEV-PAYPHONE] Auto-reconcile once on mount to handle mobile redirect failures immediately
+        // Auto-reconcile siempre para asegurar estado fresco
         handleReconcile();
 
-        // Polling if PENDING
-        pollTimerRef.current = setInterval(() => {
-            setPollCount(prev => {
-                if (prev >= maxPolls) {
-                    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-                    setLoading(false);
-                    return prev;
-                }
-                fetchSale();
-                return prev + 1;
-            });
-        }, 2000);
+        // Polling si hay ID
+        if (saleId || paymentId) {
+            pollTimerRef.current = setInterval(() => {
+                setPollCount(prev => {
+                    if (prev >= maxPolls) {
+                        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                        setLoading(false);
+                        return prev;
+                    }
+                    if (saleId) fetchSale();
+                    else handleReconcile(); // Si no hay saleId, seguimos intentando reconciliar con paymentId
+                    return prev + 1;
+                });
+            }, 2000);
+        }
 
         return () => {
             if (pollTimerRef.current) clearInterval(pollTimerRef.current);
         };
-    }, [saleId, fetchSale]);
+    }, [saleId, paymentId]);
 
     if (loading && !sale) {
         return (

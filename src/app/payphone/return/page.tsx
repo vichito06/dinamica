@@ -41,14 +41,14 @@ function ReturnContent() {
         // [SEV-MOBILE] Hard Redirect Timeout (10s)
         const timeout = setTimeout(() => {
             console.log(`[RETURN] Timeout reached for ${id}. Redirecting to success page.`);
-            router.push(`/checkout/success?saleId=${id}`);
+            router.push(`/checkout/success?saleId=${clientTxId || id}&id=${id}`);
         }, 10000);
 
         const confirmPayment = async () => {
             const key = `confirm_done_${id}`;
             if (safeSessionGet(key)) {
                 console.log("[RETURN] Already confirmed in this session:", id);
-                router.push(`/checkout/success?saleId=${id}`);
+                router.push(`/checkout/success?saleId=${clientTxId || id}&id=${id}`);
                 return;
             }
 
@@ -67,7 +67,7 @@ function ReturnContent() {
                     safeSessionSet(key, "1");
                     setStatus('success');
                     // Instant redirect to success page on confirmation
-                    router.push(`/checkout/success?saleId=${id}`);
+                    router.push(`/checkout/success?saleId=${clientTxId || id}&id=${id}`);
                 } else if (data.statusCode === 2) {
                     setStatus('error');
                     setMessage('El pago fue rechazado o cancelado.');
