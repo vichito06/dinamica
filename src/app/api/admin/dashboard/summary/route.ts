@@ -38,12 +38,17 @@ export async function GET(req: Request) {
         });
 
         // 3. Tickets Sold (Current Raffle Total)
-        const ticketsSoldTotal = await prisma.ticket.count({
-            where: {
-                raffleId: activeRaffle.id,
-                status: 'SOLD'
-            }
-        });
+        const [ticketsSoldTotal, ticketsAvailableTotal, ticketsReservedTotal] = await Promise.all([
+            prisma.ticket.count({
+                where: { raffleId: activeRaffle.id, status: 'SOLD' }
+            }),
+            prisma.ticket.count({
+                where: { raffleId: activeRaffle.id, status: 'AVAILABLE' }
+            }),
+            prisma.ticket.count({
+                where: { raffleId: activeRaffle.id, status: 'RESERVED' }
+            })
+        ]);
 
         // 4. Unique Buyers (by customer.idNumber)
         const uniqueBuyersInRange = await prisma.customer.count({
@@ -58,7 +63,7 @@ export async function GET(req: Request) {
             }
         });
 
-        // 5. Visits Today (AnalyticsEvent)
+        // ... existing visits logic ...
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const visitsToday = await prisma.analyticsEvent.count({
@@ -70,6 +75,7 @@ export async function GET(req: Request) {
         });
 
         // 6. Last 7 Days Series
+        // ... (skipping loop for brevity in replacement, but I must keep it)
         const series = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date();
@@ -121,7 +127,9 @@ export async function GET(req: Request) {
                 salesTotal: (salesInRange._sum.amountCents || 0) / 100,
                 salesCount: salesInRange._count.id,
                 ticketsSold: ticketsSoldTotal,
-                ticketsAvailable: 9999 - ticketsSoldTotal,
+                ticketsAvailable: ticketsAvailableTotal,
+                ticketsReserved: ticketsReservedTotal,
+                totalTickets: ticketsSoldTotal + ticketsAvailableTotal + ticketsReservedTotal,
                 buyersUnique: uniqueBuyersInRange
             },
             series

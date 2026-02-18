@@ -12,10 +12,18 @@ export async function GET() {
         const raffleId = activeRaffle.id;
 
         // 2. Metrics parallel fetch
-        const [ticketsSold, uniqueBuyers, totalSoldAmount, analyticsRecord] = await Promise.all([
+        const [ticketsSold, ticketsAvailable, ticketsReserved, uniqueBuyers, totalSoldAmount, analyticsRecord] = await Promise.all([
             // Tickets vendidos
             prisma.ticket.count({
                 where: { status: "SOLD", raffleId }
+            }),
+            // Tickets disponibles
+            prisma.ticket.count({
+                where: { status: "AVAILABLE", raffleId }
+            }),
+            // Tickets reservados
+            prisma.ticket.count({
+                where: { status: "RESERVED", raffleId }
             }),
             // Compradores únicos con ventas pagadas
             prisma.customer.count({
@@ -38,30 +46,20 @@ export async function GET() {
             })
         ]);
 
-        const TOTAL_TICKETS = 9999;
+        const totalTickets = ticketsSold + ticketsAvailable + ticketsReserved;
         const visitsToday = analyticsRecord;
-        const ticketsAvailable = TOTAL_TICKETS - ticketsSold;
         const totalAmount = (totalSoldAmount._sum.amountCents ?? 0) / 100;
 
         return NextResponse.json({
             visitsToday,
             totalAmount,
             ticketsSold,
-            buyers: uniqueBuyers,
-            totalTickets: TOTAL_TICKETS,
             ticketsAvailable,
+            ticketsReserved,
+            buyers: uniqueBuyers,
+            totalTickets: totalTickets,
             raffleId
         });
-
-        return NextResponse.json({
-            visitsToday,
-            totalAmount,
-            ticketsSold,
-            buyers: uniqueBuyers,
-            totalTickets: TOTAL_TICKETS,
-            ticketsAvailable,
-        });
-
     } catch (error) {
         console.error("[STATS_ERROR]", error);
         return NextResponse.json(

@@ -61,9 +61,10 @@ export async function GET(req: Request) {
         ]);
 
         // Helper counts for the whole raffle
-        const [soldCount, availableCount] = await Promise.all([
+        const [soldCount, availableCount, reservedCount] = await Promise.all([
             prisma.ticket.count({ where: { raffleId: activeRaffle.id, status: 'SOLD' } }),
-            prisma.ticket.count({ where: { raffleId: activeRaffle.id, status: 'AVAILABLE' } })
+            prisma.ticket.count({ where: { raffleId: activeRaffle.id, status: 'AVAILABLE' } }),
+            prisma.ticket.count({ where: { raffleId: activeRaffle.id, status: 'RESERVED' } })
         ]);
 
         return NextResponse.json({
@@ -85,7 +86,8 @@ export async function GET(req: Request) {
             summary: {
                 sold: soldCount,
                 available: availableCount,
-                total: soldCount + availableCount
+                reserved: reservedCount,
+                total: soldCount + availableCount + reservedCount
             }
         });
 

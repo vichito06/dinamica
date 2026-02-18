@@ -27,7 +27,9 @@ export async function GET(req: Request) {
         const [
             visits,
             sales,
-            ticketsSoldCount,
+            ticketsSold,
+            ticketsAvailable,
+            ticketsReserved,
             buyers
         ] = await Promise.all([
             // Visits (LANDING_VISIT)
@@ -56,6 +58,20 @@ export async function GET(req: Request) {
                     soldAt: { gte: dateFrom, lte: dateTo }
                 }
             }),
+            // Tickets Available
+            prisma.ticket.count({
+                where: {
+                    raffleId: activeRaffle.id,
+                    status: 'AVAILABLE'
+                }
+            }),
+            // Tickets Reserved
+            prisma.ticket.count({
+                where: {
+                    raffleId: activeRaffle.id,
+                    status: 'RESERVED'
+                }
+            }),
             // Unique Buyers
             prisma.sale.groupBy({
                 by: ['customerId'],
@@ -67,7 +83,8 @@ export async function GET(req: Request) {
             })
         ]);
 
-        const ticketsTotal = 9999;
+        const ticketsSoldCount = ticketsSold;
+        const ticketsTotal = ticketsSold + ticketsAvailable + ticketsReserved;
         const totalSoldAmount = (sales._sum.amountCents || 0) / 100;
 
         // Daily Trends
@@ -126,9 +143,10 @@ export async function GET(req: Request) {
                 totalSoldAmount,
                 totalSalesCount: sales._count.id,
                 ticketsSoldCount,
+                ticketsReservedCount: ticketsReserved,
                 buyersCount: buyers.length,
                 ticketsTotal,
-                ticketsAvailableCount: Math.max(0, ticketsTotal - ticketsSoldCount)
+                ticketsAvailableCount: ticketsAvailable
             },
             dailyTrends: dailyData
         });
