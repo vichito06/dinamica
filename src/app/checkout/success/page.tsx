@@ -7,15 +7,23 @@ import { Check, Loader2, AlertCircle, ArrowRight, RefreshCw, ExternalLink } from
 import Link from 'next/link';
 import Image from 'next/image';
 
+function getCookie(name: string) {
+    if (typeof document === "undefined") return "";
+    const m = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+    return m ? decodeURIComponent(m[2]) : "";
+}
+
 function SuccessContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
 
-    // Identificadores (saleId de nuestra DB, id/paymentId de PayPhone)
-    const initialSaleId = searchParams.get('saleId');
-    const paymentId = searchParams.get('id') || searchParams.get('paymentId');
+    // 1. Identificadores (Query -> LocalStorage -> Cookies)
+    const querySaleId = searchParams.get('saleId') || "";
+    const queryPaymentId = searchParams.get('id') || searchParams.get('paymentId') || "";
 
-    const [saleId, setSaleId] = useState<string | null>(initialSaleId);
+    const [saleId, setSaleId] = useState<string | null>(null);
+    const [paymentId, setPaymentId] = useState<string | null>(null);
+
     const [sale, setSale] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -24,6 +32,31 @@ function SuccessContent() {
     const [isReconciling, setIsReconciling] = useState(false);
     const maxPolls = 15; // 30 seconds total (2s intervals)
     const pollTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Manual Recovery State
+    const [manualPaymentId, setManualPaymentId] = useState("");
+
+    const cleanupPersistence = () => {
+        try {
+            localStorage.removeItem("pp_last_saleId");
+            localStorage.removeItem("pp_last_paymentId");
+            document.cookie = "pp_last_saleId=; path=/; max-age=0";
+            document.cookie = "pp_last_paymentId=; path=/; max-age=0";
+        } catch (e) { }
+    };
+
+    useEffect(() => {
+        const lsSaleId = typeof window !== "undefined" ? localStorage.getItem("pp_last_saleId") || "" : "";
+        const lsPaymentId = typeof window !== "undefined" ? localStorage.getItem("pp_last_paymentId") || "" : "";
+        const ckSaleId = getCookie("pp_last_saleId");
+        const ckPaymentId = getCookie("pp_last_paymentId");
+
+        const finalSaleId = querySaleId || lsSaleId || ckSaleId;
+        const finalPaymentId = queryPaymentId || lsPaymentId || ckPaymentId;
+
+        setSaleId(finalSaleId || null);
+        setPaymentId(finalPaymentId || null);
+    }, [querySaleId, queryPaymentId]);
 
     const fetchSale = useCallback(async (targetId?: string) => {
         const idToFetch = targetId || saleId;
@@ -39,6 +72,7 @@ function SuccessContent() {
 
             if (data.status === 'PAID') {
                 setLoading(false);
+                cleanupPersistence();
                 if (pollTimerRef.current) clearInterval(pollTimerRef.current);
             }
         } catch (err: any) {
@@ -48,8 +82,12 @@ function SuccessContent() {
         }
     }, [saleId]);
 
-    const handleReconcile = async () => {
-        if ((!saleId && !paymentId) || isReconciling) return;
+    const handleReconcile = async (forcePaymentId?: string) => {
+        const targetSaleId = saleId;
+        const targetPaymentId = forcePaymentId || paymentId;
+
+        if ((!targetSaleId && !targetPaymentId) || isReconciling) return;
+
         setIsReconciling(true);
         setError(null);
         setLoading(true);
@@ -58,21 +96,22 @@ function SuccessContent() {
             const res = await fetch('/api/payphone/reconcile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(saleId ? { saleId } : { paymentId })
+                body: JSON.stringify(targetSaleId ? { saleId: targetSaleId } : { paymentId: targetPaymentId })
             });
             const data = await res.json();
 
             if (data.ok) {
-                // Si encontramos el saleId (porque entramos por paymentId), lo fijamos
                 if (data.saleId && !saleId) {
                     setSaleId(data.saleId);
                 }
-                await fetchSale(data.saleId || saleId);
+                await fetchSale(data.saleId || targetSaleId || undefined);
+                if (data.status === 'APPROVED') {
+                    cleanupPersistence();
+                }
             } else if (data.code === 'NOT_FOUND') {
                 setError('No encontramos ninguna venta pendiente para este pago.');
             } else {
-                // Aún no está aprobado o hubo error
-                if (!saleId) setError('No pudimos recuperar tu compra. Contacta a soporte.');
+                if (!targetSaleId) setError('No pudimos recuperar tu compra. Contacta a soporte.');
             }
         } catch (e) {
             console.error('Reconcile error:', e);
@@ -117,6 +156,11 @@ function SuccessContent() {
         };
     }, [saleId, paymentId]);
 
+    const isPaid = status === 'PAID';
+    const isPending = status === 'PENDING' && pollCount < maxPolls;
+    const isTimeout = status === 'PENDING' && pollCount >= maxPolls;
+    const isError = status === 'ERROR' || (sale?.lastError && !isPaid);
+
     if (loading && !sale) {
         return (
             <div className="flex flex-col items-center justify-center py-20">
@@ -126,7 +170,20 @@ function SuccessContent() {
         );
     }
 
-    if (error) {
+    if (!saleId && !paymentId && !isPaid) {
+        return (
+            <div className="max-w-md mx-auto py-10">
+                <ManualRecoveryUX
+                    manualId={manualPaymentId}
+                    setManualId={setManualPaymentId}
+                    onRecover={() => handleReconcile(manualPaymentId)}
+                    loading={isReconciling}
+                />
+            </div>
+        );
+    }
+
+    if (error && !saleId) {
         return (
             <div className="text-center py-10">
                 <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -138,11 +195,6 @@ function SuccessContent() {
             </div>
         );
     }
-
-    const isPaid = status === 'PAID';
-    const isPending = status === 'PENDING' && pollCount < maxPolls;
-    const isTimeout = status === 'PENDING' && pollCount >= maxPolls;
-    const isError = status === 'ERROR' || (sale?.lastError && !isPaid);
 
     const ticketNumbers = isPaid ? (sale.tickets || []).map((t: any) => t.number.toString().padStart(4, '0')) : sale?.requestedNumbers || [];
 
@@ -212,7 +264,7 @@ function SuccessContent() {
                     {/* [SEV-PAYPHONE] Reconciliation Button */}
                     {(isPending || isError || isTimeout) && !isPaid && (
                         <button
-                            onClick={handleReconcile}
+                            onClick={() => handleReconcile()}
                             disabled={isReconciling}
                             className="w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold rounded-xl hover:shadow-lg hover:shadow-orange-500/50 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                         >
@@ -255,6 +307,46 @@ function SuccessContent() {
                 </div>
             </motion.div>
         </div>
+    );
+}
+
+function ManualRecoveryUX({ manualId, setManualId, onRecover, loading }: any) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-strong p-8 rounded-3xl text-center border border-white/10 shadow-2xl"
+        >
+            <div className="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <RefreshCw className={`w-8 h-8 text-orange-500 ${loading ? 'animate-spin' : ''}`} />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Recuperar Compra</h2>
+            <p className="text-white/60 text-sm mb-8">
+                Si no redirigió automáticamente, ingresa el <b>ID de Pago</b> que recibiste en tu correo de PayPhone.
+            </p>
+
+            <div className="space-y-4">
+                <input
+                    type="text"
+                    value={manualId}
+                    onChange={(e) => setManualId(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Ej: 1234567"
+                    className="w-full bg-white/5 border border-white/10 py-4 px-6 rounded-2xl text-white text-center text-xl font-mono focus:border-orange-500/50 outline-none transition-all"
+                />
+
+                <button
+                    onClick={onRecover}
+                    disabled={loading || !manualId}
+                    className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:grayscale"
+                >
+                    {loading ? 'Buscando...' : 'Verificar Pago'}
+                </button>
+
+                <p className="text-[10px] text-white/30 pt-4">
+                    Este ID aparece como "ID de transacción" en el correo de confirmación de PayPhone.
+                </p>
+            </div>
+        </motion.div>
     );
 }
 
