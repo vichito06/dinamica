@@ -30,33 +30,32 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: false, error: 'Sale not found' }, { status: 404 });
         }
 
-        // ✅ LEY 0 - CASO: YA PAID (Idempotency)
         if (sale.status === SaleStatus.PAID) {
-            const rec = await prisma.$transaction(async (tx) => {
-                return await recoverAndFixTicketNumbers(tx, sale.id);
-            });
+            try {
+                const ticketNumbers = await prisma.$transaction(async (tx) => {
+                    return await promoteTicketsForSale(tx, sale.id);
+                });
 
-            if (!rec.ok) {
-                console.error(`[GHOST] Sale already PAID but irrecoverable: ${sale.id}`);
+                return NextResponse.json({
+                    ok: true,
+                    alreadyPaid: true,
+                    statusCode: 3,
+                    saleId: sale.id,
+                    ticketNumbers: ticketNumbers,
+                    source: "idempotency_promote"
+                }, {
+                    headers: { 'Cache-Control': 'no-store, max-age=0' }
+                });
+            } catch (err: any) {
+                console.error(`[CONFIRM] Idempotency promotion failed for sale ${sale.id}:`, err.message);
                 return NextResponse.json({
                     ok: false,
                     alreadyPaid: true,
-                    code: 'GHOST_SALE',
+                    code: 'PROMOTION_FAILED',
                     saleId: sale.id,
-                    ticketNumbers: []
+                    error: err.message
                 }, { status: 500 });
             }
-
-            return NextResponse.json({
-                ok: true,
-                alreadyPaid: true,
-                statusCode: 3,
-                saleId: sale.id,
-                ticketNumbers: rec.ticketNumbers,
-                source: rec.source
-            }, {
-                headers: { 'Cache-Control': 'no-store, max-age=0' }
-            });
         }
 
         // Call PayPhone V2 Confirm
