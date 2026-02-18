@@ -1,8 +1,1 @@
-{
-    "crons": [
-        {
-            "path": "/api/cron/reconcile-pending?secret=Altsvaq93sebastian",
-            "schedule": "*/5 * * * *"
-        }
-    ]
-}
+{}
