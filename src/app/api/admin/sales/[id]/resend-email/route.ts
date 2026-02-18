@@ -9,10 +9,10 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(
     request: Request,
-    { params }: { params: { id: string } }
+    context: { params: Promise<{ id: string }> }
 ) {
     try {
-        const saleId = params.id;
+        const { id: saleId } = await context.params;
 
         // Admin Auth Check
         const VALID_SECRET = process.env.ADMIN_SESSION_SECRET || process.env.TEST_SECRET;
