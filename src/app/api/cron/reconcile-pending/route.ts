@@ -1,67 +1,28 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { reconcileSale } from "@/lib/reconciliation";
-import { SaleStatus } from "@prisma/client";
+import { reconcilePendingSales } from "@/lib/reconciliation";
 
-export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/cron/reconcile-pending
- * Protegido por CRON_SECRET
- * 
- * Busca ventas PENDING de las últimas 24 horas y las reconcilia con PayPhone.
- */
 export async function GET(req: Request) {
-    const { searchParams } = new URL(req.url);
-    const querySecret = searchParams.get('secret');
-    const authHeader = req.headers.get('authorization');
-    const secret = process.env.CRON_SECRET;
+    const url = new URL(req.url);
 
-    const isAuthorized = secret && (
-        (authHeader === `Bearer ${secret}`) ||
-        (querySecret === secret)
-    );
+    const secretQuery = url.searchParams.get("secret");
+    const auth = req.headers.get("authorization") ?? "";
+    const secretHeader = auth.startsWith("Bearer ") ? auth.slice(7) : "";
 
-    if (!isAuthorized) {
-        console.warn(`[CRON Reconcile] Unauthorized attempt. Query: ${!!querySecret}, Header: ${!!authHeader}`);
-        return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    const expected = process.env.CRON_SECRET ?? "";
+
+    const ok = expected && (secretQuery === expected || secretHeader === expected);
+    if (!ok) {
+        console.error("[CRON] unauthorized", { hasQuery: !!secretQuery, hasHeader: !!secretHeader });
+        return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
 
     try {
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-        // Buscar ventas PENDING que tengan datos de PayPhone
-        const pendingSales = await prisma.sale.findMany({
-            where: {
-                status: SaleStatus.PENDING,
-                createdAt: { gte: twentyFourHoursAgo },
-                payphonePaymentId: { not: null as any },
-                clientTransactionId: { not: null as any }
-            },
-            take: 20 // Procesar en lotes pequeños para evitartimeouts
-        });
-
-        console.log(`[CRON Reconcile] Found ${pendingSales.length} pending sales to process.`);
-
-        const results = [];
-        for (const sale of pendingSales) {
-            const result = await reconcileSale(sale.id);
-            results.push({
-                saleId: sale.id,
-                status: result.status,
-                ok: result.ok
-            });
-        }
-
-        return NextResponse.json({
-            ok: true,
-            processed: pendingSales.length,
-            results
-        });
-
+        const result = await reconcilePendingSales({ lookbackHours: 24 });
+        return NextResponse.json({ ok: true, ...result });
     } catch (error: any) {
-        console.error('[CRON Reconcile] Crash:', error);
+        console.error("[CRON] Crash:", error);
         return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
     }
 }
