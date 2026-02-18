@@ -13,273 +13,149 @@ function ReturnContent() {
     const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
     const [message, setMessage] = useState('');
     const [ticketNumbers, setTicketNumbers] = useState<string[]>([]);
-    const [emailSent, setEmailSent] = useState(false);
     const [saleId, setSaleId] = useState<string | null>(null);
-    const [isResending, setIsResending] = useState(false);
-    const [isRecovering, setIsRecovering] = useState(false);
-    const [resendStatus, setResendStatus] = useState<string | null>(null);
+    const [redirectTimer, setRedirectTimer] = useState(10);
 
-    const recoverTickets = async () => {
-        if (!saleId) return;
-        setIsRecovering(true);
-        try {
-            const res = await fetch('/api/sales/tickets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ saleId }),
-                cache: 'no-store'
-            });
-            const data = await res.json();
-            if (res.ok && data.ticketNumbers) {
-                setTicketNumbers(data.ticketNumbers);
-            } else {
-                setMessage(data.error || 'No se pudieron recuperar los tickets.');
-            }
-        } catch (e) {
-            setMessage('Error de conexión al recuperar tickets.');
-        } finally {
-            setIsRecovering(false);
-        }
+    // Safe storage wrapper
+    const safeSessionGet = (key: string) => {
+        try { return sessionStorage.getItem(key); } catch (e) { return null; }
+    };
+    const safeSessionSet = (key: string, val: string) => {
+        try { sessionStorage.setItem(key, val); } catch (e) { }
     };
 
     useEffect(() => {
         const id = searchParams.get('id');
         const clientTxId = searchParams.get('clientTransactionId');
 
-        if (!id || !clientTxId) {
+        if (!id) {
+            console.error("[RETURN] Missing ID in searchParams");
             setStatus('error');
-            setMessage('Parámetros inválidos en el retorno de pago.');
+            setMessage('No se encontró el ID de la transacción.');
             return;
         }
 
+        setSaleId(id);
+        console.log(`[RETURN] Starting confirmation for saleId=${id} | clientTxId=${clientTxId}`);
+
+        // [SEV-MOBILE] Hard Redirect Timeout (10s)
+        const timeout = setTimeout(() => {
+            console.log(`[RETURN] Timeout reached for ${id}. Redirecting to success page.`);
+            router.push(`/checkout/success?saleId=${id}`);
+        }, 10000);
+
         const confirmPayment = async () => {
             const key = `confirm_done_${id}`;
-            if (sessionStorage.getItem(key)) {
-                console.log("[return/page] Payment already confirmed in this session for ID:", id);
-                // Even if already confirmed, we might need to show the tickets if they are in state
-                // But the effect will run again on reload, and state will be empty.
-                // The API should be idempotent, but we want to avoid the extra network call.
-                // If we skip the call, we need to recover the tickets if they aren't show yet.
-                // However, the user explicitly asked to RETURN if session storage has the key.
-                // Let's follow the user's advice and add the key AFTER success.
+            if (safeSessionGet(key)) {
+                console.log("[RETURN] Already confirmed in this session:", id);
+                router.push(`/checkout/success?saleId=${id}`);
                 return;
             }
 
             try {
-                // Use Cache-Control 'no-store' and local state for instant display
                 const response = await fetch('/api/payphone/confirm', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Cache-Control': 'no-store'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, saleId: id, clientTransactionId: clientTxId }),
                     cache: 'no-store'
                 });
 
                 const data = await response.json();
-                const isSuccess = response.ok && (data.statusCode === 3 || data.ok === true);
+                console.log(`[RETURN] Confirm response status=${response.status} for ${id}:`, data);
 
-                if (isSuccess) {
-                    sessionStorage.setItem(key, "1"); // Mark as done
+                if (response.ok && (data.statusCode === 3 || data.ok)) {
+                    safeSessionSet(key, "1");
                     setStatus('success');
-                    setSaleId(data.saleId);
-
-                    // Prioritize tickets from the API response
-                    if (data.ticketNumbers && Array.isArray(data.ticketNumbers) && data.ticketNumbers.length > 0) {
-                        setTicketNumbers(data.ticketNumbers);
-                    } else {
-                        // AUTOMATIC FAILSAFE: Call recovery if confirm returned empty
-                        console.log("[return/page] Confirm returned empty tickets, triggering automatic recovery...");
-                        // We can't call recoverTickets() directly here because saleId state update isn't flushed yet
-                        // but we have data.saleId directly.
-                        const recoveryResponse = await fetch('/api/sales/tickets', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ saleId: data.saleId }),
-                            cache: 'no-store'
-                        });
-                        const recoveryData = await recoveryResponse.json();
-                        if (recoveryResponse.ok && recoveryData.ticketNumbers && recoveryData.ticketNumbers.length > 0) {
-                            setTicketNumbers(recoveryData.ticketNumbers);
-                        } else {
-                            setTicketNumbers([]);
-                        }
-                    }
-
-                    setEmailSent(data.emailSent || false);
-
-                    // Clear session/checkout data
-                    sessionStorage.removeItem('checkout:selectedTickets');
-                    sessionStorage.removeItem('yvossoeee_sessionId');
+                    // Instant redirect to success page on confirmation
+                    router.push(`/checkout/success?saleId=${id}`);
                 } else if (data.statusCode === 2) {
                     setStatus('error');
                     setMessage('El pago fue rechazado o cancelado.');
+                    clearTimeout(timeout);
                 } else {
-                    setStatus('error');
-                    setMessage(data.error || 'No se pudo verificar el estado del pago.');
+                    console.warn(`[RETURN] Unexpected status for ${id}. Will allow timeout redirect.`);
                 }
             } catch (error) {
-                console.error('Confirmation error:', error);
-                setStatus('error');
-                setMessage('Error de comunicación. Si tu pago se descontó, contacta a soporte.');
+                console.error(`[RETURN] Fetch error for ${id}:`, error);
+                // We DON'T set status to error here to allow the timeout redirect to work
+                // in case it was just a transient connection issue but the payment went through.
             }
         };
 
         confirmPayment();
+        return () => clearTimeout(timeout);
     }, [searchParams, router]);
+
+    // Countdown for redirect
+    useEffect(() => {
+        if (status === 'loading' && redirectTimer > 0) {
+            const t = setTimeout(() => setRedirectTimer(prev => prev - 1), 1000);
+            return () => clearTimeout(t);
+        }
+    }, [redirectTimer, status]);
 
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="glass-strong p-8 md:p-12 rounded-2xl max-w-2xl w-full text-center"
+            className="glass-strong p-8 md:p-12 rounded-2xl max-w-2xl w-full text-center border border-white/10 shadow-2xl"
         >
             {status === 'loading' && (
                 <div className="flex flex-col items-center">
-                    <Loader2 className="w-16 h-16 text-white animate-spin mb-6" />
-                    <h2 className="text-2xl font-bold text-white mb-2">Verificando Pago...</h2>
-                    <p className="text-white/70">Por favor espera un momento.</p>
-                </div>
-            )}
-
-            {status === 'success' && (
-                <div className="flex flex-col items-center">
-                    <div className="w-20 h-20 bg-gradient-to-r from-green-600 to-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                        <Check className="w-10 h-10 text-white" />
+                    <div className="relative mb-8">
+                        <Loader2 className="w-20 h-20 text-blue-500 animate-spin" />
+                        <div className="absolute inset-0 flex items-center justify-center font-bold text-white text-xs">
+                            {redirectTimer}s
+                        </div>
                     </div>
-                    <h2 className="text-3xl font-bold text-white mb-2">¡Pago Exitoso!</h2>
-
-                    <p className="text-white/60 mb-6 text-sm">
-                        Confirmación exitosa. Aquí están tus números oficiales:
+                    <h2 className="text-2xl font-bold text-white mb-2">Finalizando Compra</h2>
+                    <p className="text-white/60 mb-8 max-w-xs mx-auto">
+                        Estamos verificando tu pago con PayPhone. No cierres esta ventana.
                     </p>
 
-                    {/* Ticket Display Grid */}
-                    <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-                        <h3 className="text-white font-bold mb-4 uppercase tracking-wider text-xs opacity-50">Tus Números de la Suerte</h3>
-
-                        {ticketNumbers.length > 0 ? (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                                {ticketNumbers.map(num => (
-                                    <div key={num} className="bg-white/10 border border-white/10 py-3 rounded-xl text-white font-mono font-bold text-lg shadow-inner text-center">
-                                        {num}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                                <p className="text-red-400 text-sm font-medium mb-3">
-                                    No se pudieron recuperar tus números automáticamente. Por favor, contacta a soporte con tu ID de transacción.
-                                </p>
-                                <button
-                                    onClick={recoverTickets}
-                                    disabled={isRecovering}
-                                    className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-lg border border-white/10 transition-all flex items-center justify-center gap-2"
-                                >
-                                    {isRecovering ? (
-                                        <>
-                                            <Loader2 className="w-3 h-3 animate-spin" />
-                                            Intentando nuevamente...
-                                        </>
-                                    ) : (
-                                        "Reintentar Recuperación"
-                                    )}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col gap-4 w-full mb-8">
-                        {saleId && (
-                            <button
-                                onClick={async () => {
-                                    setIsResending(true);
-                                    setResendStatus(null);
-                                    try {
-                                        const res = await fetch('/api/sales/resend', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ saleId }),
-                                            cache: 'no-store'
-                                        });
-                                        const d = await res.json();
-                                        if (res.ok) {
-                                            setResendStatus('success');
-                                            setTimeout(() => setResendStatus(null), 5000);
-                                        } else {
-                                            setMessage(d.error || 'Error al reenviar');
-                                            setResendStatus('error');
-                                            setTimeout(() => setResendStatus(null), 5000);
-                                        }
-                                    } catch (e: any) {
-                                        setResendStatus('error');
-                                        setMessage('Error de conexión');
-                                        setTimeout(() => setResendStatus(null), 5000);
-                                    } finally {
-                                        setIsResending(false);
-                                    }
-                                }}
-                                disabled={isResending}
-                                className="text-white/60 hover:text-white text-xs flex items-center justify-center gap-2 transition-colors"
-                            >
-                                {isResending ? (
-                                    <>
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                        Reenviando...
-                                    </>
-                                ) : resendStatus === 'success' ? (
-                                    <>
-                                        <Check className="w-3 h-3 text-green-500" />
-                                        ¡Correo reenviado!
-                                    </>
-                                ) : resendStatus === 'error' ? (
-                                    <span className="text-red-400">
-                                        {message || "No se pudo reenviar"}
-                                    </span>
-                                ) : (
-                                    "¿No recibiste el correo? Reenviar"
-                                )}
-                            </button>
-                        )}
-
-                        <Link
-                            href="/"
-                            className="w-full sm:w-auto px-10 py-4 bg-white text-black font-bold rounded-xl hover:scale-105 transition-transform flex items-center justify-center gap-2 shadow-xl shadow-white/10 mx-auto"
+                    {saleId && (
+                        <button
+                            onClick={() => router.push(`/checkout/success?saleId=${saleId}`)}
+                            className="w-full py-4 bg-white/10 border border-white/20 text-white font-bold rounded-xl hover:bg-white/20 transition-all flex items-center justify-center gap-2 group"
                         >
-                            Volver al Inicio
-                            <ArrowRight className="w-5 h-5" />
-                        </Link>
-                    </div>
+                            Ver mis números ahora
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    )}
                 </div>
             )}
 
             {status === 'error' && (
                 <div className="flex flex-col items-center">
-                    <div className="w-24 h-24 bg-gradient-to-r from-red-600 to-red-700 rounded-full flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(239,68,68,0.4)]">
-                        <X className="w-12 h-12 text-white" />
+                    <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
+                        <X className="w-10 h-10 text-red-500" />
                     </div>
-                    <h2 className="text-3xl font-bold text-white mb-4">Pago no completado</h2>
+                    <h2 className="text-2xl font-bold text-white mb-4">Transferencia Incompleta</h2>
                     <p className="text-white/70 mb-8">
-                        {message}
+                        {message || "No pudimos confirmar el estado de tu pago."}
                     </p>
                     <div className="flex flex-col gap-3 w-full">
                         <button
                             onClick={() => router.push('/checkout')}
-                            className="w-full px-8 py-3 bg-gradient-to-r from-orange-500 to-pink-600 text-white font-bold rounded-xl hover:scale-105 transition-transform"
+                            className="w-full py-4 bg-gradient-to-r from-orange-500 to-pink-600 text-white font-bold rounded-xl"
                         >
-                            Intentar Nuevamente
+                            Volver al Checkout
                         </button>
-                        <Link
-                            href="/"
-                            onClick={() => {
-                                localStorage.removeItem('yvossoeee_selectedNumbers');
-                                localStorage.removeItem('yvossoeee_sessionId');
-                            }}
-                            className="text-white/50 hover:text-white text-sm"
-                        >
-                            Cancelar y volver al inicio
+                        <Link href="/" className="text-white/40 text-sm hover:text-white transition-colors">
+                            Volver al Inicio
                         </Link>
                     </div>
+                </div>
+            )}
+
+            {status === 'success' && (
+                <div className="flex flex-col items-center">
+                    <div className="w-20 h-20 bg-green-500/20 rounded-full flex items-center justify-center mb-6">
+                        <Check className="w-10 h-10 text-green-500" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">¡Confirmado!</h2>
+                    <p className="text-white/60 mb-6">Redirigiéndote a tus números...</p>
+                    <Loader2 className="w-6 h-6 text-white/20 animate-spin" />
                 </div>
             )}
         </motion.div>

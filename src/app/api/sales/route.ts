@@ -112,6 +112,11 @@ export async function POST(request: Request) {
 
             // Create Sale linked to Customer - [LAW 0] Save requestedNumbers snapshot
             const requestedNumbers = ticketNumbers.map(n => String(n).padStart(4, '0'));
+
+            if (!requestedNumbers || requestedNumbers.length === 0) {
+                throw new Error('MANDATORY_SNAPSHOT:No se pudieron generar los números solicitados.');
+            }
+
             const sale = await tx.sale.create({
                 data: {
                     status: SaleStatus.PENDING,

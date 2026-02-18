@@ -107,6 +107,7 @@ export async function POST(req: Request) {
                 const ticketNumbers = payload.ticketNumbers;
                 const customer = payload.sale.customer;
                 console.log(`[CONFIRM] SUCCESS: saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
+                console.log(`[SUCCESS_REDIRECT] Preparing redirect response for saleId=${sale.id}`);
 
                 // Email (best effort)
                 try {
