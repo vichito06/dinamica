@@ -71,6 +71,7 @@ export async function GET(req: Request) {
             ok: true,
             tickets: tickets.map(t => ({
                 id: t.id,
+                raffleId: t.raffleId,
                 number: t.number.toString().padStart(4, '0'),
                 status: t.status,
                 buyerName: t.sale?.customer ? `${t.sale.customer.firstName} ${t.sale.customer.lastName}` : null,

@@ -1525,10 +1525,10 @@ function TicketsView() {
     }, [mode, page, search]);
 
     const manualRelease = async (ticket: any) => {
-        const raffleId = ticket.raffleId ?? ticket.raffle?.id;
-        const number = Number(ticket.number ?? ticket.ticketNumber);
+        const raffleId = ticket.raffleId ?? ticket.raffle?.id ?? ticket.raffle?.cuid;
+        const number = Number(ticket.number ?? ticket.ticketNumber ?? ticket.num);
 
-        if (!raffleId || !Number.isFinite(number)) {
+        if (!ticket.id && (!raffleId || !Number.isFinite(number))) {
             alert("No se pudo liberar: falta raffleId o número inválido.");
             return;
         }
