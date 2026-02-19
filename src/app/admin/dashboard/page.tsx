@@ -1524,14 +1524,30 @@ function TicketsView() {
         fetchTickets();
     }, [mode, page, search]);
 
-    const manualRelease = async (raffleId: string, number: number) => {
+    const manualRelease = async (ticket: any) => {
+        const raffleId = ticket.raffleId ?? ticket.raffle?.id;
+        const number = Number(ticket.number ?? ticket.ticketNumber);
+
+        if (!raffleId || !Number.isFinite(number)) {
+            alert("No se pudo liberar: falta raffleId o número inválido.");
+            return;
+        }
+
         if (!confirm(`¿Estás seguro de liberar el ticket #${number.toString().padStart(4, '0')}? La venta asociada se cancelará.`)) return;
+
+        const requestBody = {
+            ticketId: ticket.id,
+            raffleId,
+            number,
+            reason: "Admin manual release",
+            force: false
+        };
 
         try {
             let res = await fetch("/api/admin/tickets/manual-release", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ raffleId, number, reason: "Manual admin release" }),
+                body: JSON.stringify(requestBody),
             });
 
             let data = await res.json().catch(() => ({}));
@@ -1543,7 +1559,7 @@ function TicketsView() {
                 res = await fetch("/api/admin/tickets/manual-release", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ raffleId, number, reason: "Manual admin release (FORCED)", force: true }),
+                    body: JSON.stringify({ ...requestBody, force: true, reason: "Admin manual release (FORCED)" }),
                 });
                 data = await res.json().catch(() => ({}));
             }
@@ -1633,7 +1649,7 @@ function TicketsView() {
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                manualRelease(ticket.raffleId, ticket.number);
+                                                manualRelease(ticket);
                                             }}
                                             className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center text-[8px] hover:bg-red-700 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-lg z-10"
                                             title="Liberar ticket (reverso)"

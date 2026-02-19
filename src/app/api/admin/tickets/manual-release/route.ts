@@ -7,22 +7,28 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
     try {
         const body = await req.json().catch(() => ({}));
-        const { raffleId, number, reason, force } = body as {
+        const { ticketId, raffleId, number, reason, force } = body as {
+            ticketId?: string;
             raffleId?: string;
             number?: number;
             reason?: string;
             force?: boolean;
         };
 
-        if (!raffleId || !number) {
-            return NextResponse.json({ error: "raffleId and number required" }, { status: 400 });
+        if (!ticketId && (!raffleId || !number)) {
+            return NextResponse.json({ error: "ticketId OR (raffleId and number) required" }, { status: 400 });
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            const ticket = await tx.ticket.findUnique({
-                where: { raffleId_number: { raffleId, number: Number(number) } },
-                include: { sale: true },
-            });
+            const ticket = ticketId
+                ? await tx.ticket.findUnique({
+                    where: { id: ticketId },
+                    include: { sale: true },
+                })
+                : await tx.ticket.findUnique({
+                    where: { raffleId_number: { raffleId: raffleId!, number: Number(number) } },
+                    include: { sale: true },
+                });
 
             if (!ticket) return { ok: false, code: "NOT_FOUND" as const };
 
