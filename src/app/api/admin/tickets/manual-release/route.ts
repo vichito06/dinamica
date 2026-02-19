@@ -7,10 +7,11 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
     try {
         const body = await req.json().catch(() => ({}));
-        const { raffleId, number, reason } = body as {
+        const { raffleId, number, reason, force } = body as {
             raffleId?: string;
             number?: number;
             reason?: string;
+            force?: boolean;
         };
 
         if (!raffleId || !number) {
@@ -28,9 +29,13 @@ export async function POST(req: Request) {
             // Solo tiene sentido liberar si estaba RESERVED o SOLD
             if (ticket.status === TicketStatus.AVAILABLE) return { ok: true, already: true };
 
-            // Guard de seguridad: si la venta está PAID, NO liberar desde admin
-            if (ticket.sale?.status === SaleStatus.PAID) {
-                return { ok: false, code: "SALE_IS_PAID" as const };
+            // Guard de seguridad: si la venta está PAID, permitir SOLO si force=true
+            if (ticket.sale?.status === SaleStatus.PAID && !force) {
+                return {
+                    ok: false,
+                    code: "SALE_IS_PAID" as const,
+                    message: "La venta está PAGADA. Usa 'Forzar' solo si PayPhone la reversó."
+                };
             }
 
             // Libera el ticket
@@ -45,13 +50,13 @@ export async function POST(req: Request) {
                 },
             });
 
-            // Si había una venta asociada y no está PAID, la marcamos como CANCELED
+            // Si había una venta asociada, la marcamos como CANCELED (o REVERSADA)
             if (ticket.saleId) {
                 await tx.sale.update({
                     where: { id: ticket.saleId },
                     data: {
                         status: SaleStatus.CANCELED,
-                        lastError: `MANUAL_RELEASE${reason ? `: ${reason}` : ""}`,
+                        lastError: `MANUAL_RELEASE${force ? "_FORCED" : ""}: ${reason || "No reason provided"}`,
                         lastErrorAt: new Date(),
                     },
                 });

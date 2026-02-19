@@ -72,11 +72,12 @@ export async function GET(req: Request) {
                 _sum: { amountCents: true },
                 _count: { id: true }
             }),
-            // Tickets Sold
+            // Tickets Sold (Strictly tied to PAID sales)
             prisma.ticket.count({
                 where: {
                     raffleId: activeRaffle.id,
                     status: 'SOLD',
+                    sale: { status: 'PAID' },
                     soldAt: { gte: dateFrom, lte: dateTo }
                 }
             }),
@@ -142,6 +143,7 @@ export async function GET(req: Request) {
                     where: {
                         raffleId: activeRaffle.id,
                         status: 'SOLD',
+                        sale: { status: 'PAID' },
                         soldAt: { gte: start, lte: end }
                     }
                 })
@@ -172,6 +174,7 @@ export async function GET(req: Request) {
                 where: {
                     raffleId: activeRaffle.id,
                     status: 'SOLD',
+                    sale: { status: 'PAID' },
                     soldAt: { gte: dateFrom, lte: dateTo }
                 },
                 include: {

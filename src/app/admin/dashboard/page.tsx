@@ -1528,17 +1528,28 @@ function TicketsView() {
         if (!confirm(`¿Estás seguro de liberar el ticket #${number.toString().padStart(4, '0')}? La venta asociada se cancelará.`)) return;
 
         try {
-            const res = await fetch("/api/admin/tickets/manual-release", {
+            let res = await fetch("/api/admin/tickets/manual-release", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ raffleId, number, reason: "Manual admin release" }),
             });
 
+            let data = await res.json().catch(() => ({}));
+
+            if (!res.ok && data?.code === "SALE_IS_PAID") {
+                const force = confirm(`${data.message || "La venta está PAGADA."}\n\n¿Confirmas que desea FORZAR la liberación?`);
+                if (!force) return;
+
+                res = await fetch("/api/admin/tickets/manual-release", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ raffleId, number, reason: "Manual admin release (FORCED)", force: true }),
+                });
+                data = await res.json().catch(() => ({}));
+            }
+
             if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                alert(data?.code === "SALE_IS_PAID"
-                    ? "No se puede liberar: la venta ya está PAGADA."
-                    : "No se pudo liberar el ticket.");
+                alert(data?.message || data?.error || data?.code || "No se pudo liberar el ticket.");
                 return;
             }
 
