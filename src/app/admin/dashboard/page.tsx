@@ -1524,6 +1524,35 @@ function TicketsView() {
         fetchTickets();
     }, [mode, page, search]);
 
+    const manualRelease = async (raffleId: string, number: number) => {
+        if (!confirm(`¿Estás seguro de liberar el ticket #${number.toString().padStart(4, '0')}? La venta asociada se cancelará.`)) return;
+
+        try {
+            const res = await fetch("/api/admin/tickets/manual-release", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ raffleId, number, reason: "Manual admin release" }),
+            });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(data?.code === "SALE_IS_PAID"
+                    ? "No se puede liberar: la venta ya está PAGADA."
+                    : "No se pudo liberar el ticket.");
+                return;
+            }
+
+            // Simple refresh strategy: re-fetch from current state
+            const ticketsRes = await fetch(`/api/admin/tickets?status=${mode}&page=${page}&pageSize=${pageSize}&q=${search}`);
+            const d = await ticketsRes.json();
+            if (d.ok) setData(d);
+
+        } catch (e) {
+            alert("Error de conexión al liberar ticket");
+            console.error(e);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header / Stats */}
@@ -1589,6 +1618,18 @@ function TicketsView() {
                                         }`}
                                 >
                                     {ticket.number}
+                                    {ticket.status !== 'AVAILABLE' && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                manualRelease(ticket.raffleId, ticket.number);
+                                            }}
+                                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white flex items-center justify-center text-[8px] hover:bg-red-700 hover:scale-110 transition-all opacity-0 group-hover:opacity-100 shadow-lg z-10"
+                                            title="Liberar ticket (reverso)"
+                                        >
+                                            ✕
+                                        </button>
+                                    )}
                                     {ticket.status === 'SOLD' && (
                                         <div className="absolute inset-x-0 -bottom-1 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                                             <div className="bg-black/90 text-[10px] text-white px-2 py-1 rounded border border-white/10 whitespace-nowrap mb-1 shadow-2xl">
