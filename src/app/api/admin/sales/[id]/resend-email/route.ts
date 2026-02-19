@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendTicketsEmail } from '@/lib/email';
-import { recoverAndFixTicketNumbers } from '@/lib/ticketNumbersRecovery';
+import { sendSaleEmail } from '@/lib/email';
 import { cookies } from 'next/headers';
 
 export const runtime = 'nodejs';
@@ -27,53 +26,22 @@ export async function POST(
             return NextResponse.json({ error: 'Falta ID de venta' }, { status: 400 });
         }
 
-        const sale = await prisma.sale.findUnique({
-            where: { id: saleId },
-            include: { customer: true }
-        });
+        try {
+            const result = await sendSaleEmail(saleId);
+            if (!result.ok) {
+                return NextResponse.json({
+                    error: 'Error al enviar el correo.',
+                    detail: result.error
+                }, { status: 500 });
+            }
 
-        if (!sale || sale.status !== 'PAID') {
-            return NextResponse.json({ error: 'La venta no existe o no está en estado PAID.' }, { status: 404 });
+            return NextResponse.json({ ok: true, message: '¡Correo reenviado con éxito desde el panel administrativo!', numbers: result.numbers });
+        } catch (error: any) {
+            if (error.message === 'SALE_NOT_FOUND') {
+                return NextResponse.json({ error: 'La venta no existe.' }, { status: 404 });
+            }
+            throw error;
         }
-
-        // Recuperación y reparación previa (Ley 0)
-        const recovery = await prisma.$transaction(async (tx) => {
-            return await recoverAndFixTicketNumbers(tx, sale.id);
-        });
-
-        if (!recovery.ok) {
-            return NextResponse.json({ error: `No se pudieron recuperar los tickets: ${recovery.reason}` }, { status: 404 });
-        }
-
-        const tickets = recovery.ticketNumbers;
-
-        console.log(`[ADMIN RESEND] Sending email for sale ${sale.id} to ${sale.customer.email}`);
-
-        const emailResult = await sendTicketsEmail({
-            to: sale.customer.email,
-            customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
-            saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
-            tickets: tickets,
-            total: sale.amountCents / 100
-        });
-
-        if (!emailResult.success) {
-            return NextResponse.json({
-                error: 'Error al enviar el correo.',
-                detail: emailResult.error
-            }, { status: 500 });
-        }
-
-        // Marcar envío exitoso
-        await prisma.sale.update({
-            where: { id: sale.id },
-            data: {
-                lastEmailSentAt: new Date(),
-                lastError: null
-            } as any
-        });
-
-        return NextResponse.json({ ok: true, message: '¡Correo reenviado con éxito desde el panel administrativo!' });
 
     } catch (error: any) {
         console.error('[Admin Resend API] Error:', error);

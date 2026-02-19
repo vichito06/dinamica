@@ -1,187 +1,103 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { SaleStatus, TicketStatus } from "@prisma/client";
+import { SaleStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
-import { sendTicketsEmail } from "@/lib/email";
-import { promoteTicketsForSale } from "@/lib/ticketPromotion";
-import { getActiveRaffleId } from "@/lib/raffle";
+import { finalizeSale } from "@/lib/finalizeSale";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const revalidate = 0;
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { id, clientTransactionId } = body;
+        // Support both PayPhone format (id/clientTransactionId) and direct polling (saleId)
+        const id = body?.id;
+        const clientTransactionId = body?.clientTransactionId;
+        const saleId = body?.saleId;
 
-        // Maintain PayPhone compatibility: strictly id and clientTransactionId
-        if (!id || !clientTransactionId) {
-            return NextResponse.json({ ok: false, error: 'Missing id or clientTransactionId' }, { status: 400 });
-        }
+        console.log(`[CONFIRM_API] Processing: id=${id}, clientTxId=${clientTransactionId}, saleId=${saleId}`);
 
+        // Find the sale
         const sale = await prisma.sale.findFirst({
-            where: { clientTransactionId },
-            select: { id: true, status: true, customer: true, amountCents: true, clientTransactionId: true, raffleId: true }
+            where: saleId ? { id: saleId } : { clientTransactionId },
+            include: { tickets: true }
         });
 
         if (!sale) {
-            console.error(`[GHOST] Sale not found for clientTxId: ${clientTransactionId}`);
-            return NextResponse.json({ ok: false, error: 'Sale not found' }, { status: 404 });
+            console.error(`[CONFIRM_API] Sale not found for: ${saleId || clientTransactionId}`);
+            return NextResponse.json({ ok: false, error: 'SALE_NOT_FOUND' }, { status: 404 });
         }
 
-        if (sale.status === SaleStatus.PAID) {
-            try {
-                const ticketNumbers = await prisma.$transaction(async (tx) => {
-                    return await promoteTicketsForSale(tx, sale.id);
-                });
+        // Idempotency check: if already PAID, finalizeSale will handle it
+        if (sale.status === SaleStatus.PAID && (sale.tickets?.length || 0) > 0) {
+            return NextResponse.json({
+                ok: true,
+                alreadyPaid: true,
+                saleId: sale.id,
+                numbers: sale.tickets.map(t => t.number)
+            });
+        }
 
-                return NextResponse.json({
-                    ok: true,
-                    alreadyPaid: true,
-                    statusCode: 3,
-                    saleId: sale.id,
-                    ticketNumbers: ticketNumbers,
-                    source: "idempotency_promote"
-                }, {
-                    headers: { 'Cache-Control': 'no-store, max-age=0' }
-                });
-            } catch (err: any) {
-                console.error(`[CONFIRM] Idempotency promotion failed for sale ${sale.id}:`, err.message);
+        // If it's a PayPhone confirmation (has PayPhone ID), we MUST verify with PayPhone
+        if (id) {
+            const result = await payphoneRequestWithRetry({
+                method: 'POST',
+                url: '/button/V2/Confirm',
+                data: {
+                    id: Number(id),
+                    clientTxId: sale.clientTransactionId
+                }
+            });
+
+            if (!result.ok) {
+                console.error(`[CONFIRM_API] PayPhone verification failed for sale ${sale.id}:`, result.status);
                 return NextResponse.json({
                     ok: false,
-                    alreadyPaid: true,
-                    code: 'PROMOTION_FAILED',
-                    saleId: sale.id,
-                    error: err.message
-                }, { status: 500 });
+                    error: "PayPhone Confirm failed",
+                    status: result.status
+                }, { status: 502 });
             }
-        }
 
-        // Call PayPhone V2 Confirm
-        const result = await payphoneRequestWithRetry({
-            method: 'POST',
-            url: '/button/V2/Confirm',
-            data: {
-                id: Number(id),
-                clientTxId: clientTransactionId
-            }
-        });
-
-        if (!result.ok) {
-            return NextResponse.json({
-                ok: false,
-                error: "PayPhone Confirm failed",
-                status: result.status
-            }, { status: 502 });
-        }
-
-        const data = result.data;
-        const isPaid = data.statusCode === 3;
-        const isCanceled = data.statusCode === 2;
-
-        if (isPaid) {
-            // ✅ LEY 0 - ESTRATEGIA A: PROMOVER PRIMERO
-            try {
-                const payload = await prisma.$transaction(async (tx) => {
-                    // 1. [L0] Promote tickets to SOLD definitively
-                    // Si falla (ej: números robados), lanzará GHOST_SALE_ERROR y hará rollback
-                    const ticketNumbers = await promoteTicketsForSale(tx, sale.id);
-
-                    // 2. [Snapshot] Update Sale status to PAID
-                    const updatedSale = await tx.sale.update({
-                        where: { id: sale.id },
-                        data: {
-                            status: SaleStatus.PAID,
-                            confirmedAt: new Date(),
-                            payphoneStatusCode: data.statusCode,
-                            payphoneAuthorizationCode: String(data.authorizationCode || ''),
-                            payphonePaymentId: String(id),
-                        } as any,
-                        include: { customer: true }
-                    });
-
-                    return { sale: updatedSale, ticketNumbers };
-                }, { timeout: 15000 });
-
-                const ticketNumbers = payload.ticketNumbers;
-                const customer = payload.sale.customer;
-                console.log(`[CONFIRM] SUCCESS: saleId=${sale.id} status=PAID ticketCount=${ticketNumbers.length}`);
-                console.log(`[SUCCESS_REDIRECT] Preparing redirect response for saleId=${sale.id}`);
-
-                // Email (best effort)
-                try {
-                    await sendTicketsEmail({
-                        to: customer.email,
-                        customerName: `${customer.firstName} ${customer.lastName}`,
-                        saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
-                        tickets: ticketNumbers,
-                        total: sale.amountCents / 100
-                    });
-                    await prisma.sale.update({
-                        where: { id: sale.id },
-                        data: { lastEmailSentAt: new Date() } as any
-                    });
-                } catch (emailErr) {
-                    console.error("[Email] Failed but sale is PAID:", emailErr);
-                }
-
+            const data = result.data;
+            if (data.statusCode !== 3) {
+                console.log(`[CONFIRM_API] Sale ${sale.id} not paid in PayPhone. Status: ${data.statusCode}`);
+                // Optional: handle CANCELED (statusCode 2) if needed, but finalizeSale is only for success
                 return NextResponse.json({
-                    ok: true,
-                    alreadyPaid: false,
-                    statusCode: 3,
-                    saleId: sale.id,
-                    ticketNumbers: ticketNumbers,
-                });
-
-            } catch (error: any) {
-                console.error(`[CONFIRM] FATAL ERROR for sale ${sale.id}:`, error.message);
-
-                // Guardar error en la venta para auditoría admin
-                await prisma.sale.update({
-                    where: { id: sale.id },
-                    data: {
-                        lastError: error.message,
-                        lastErrorAt: new Date()
-                    } as any
-                }).catch(e => console.error("[AUDIT] Falló al guardar error en DB:", e));
-
-                if (error.message.includes('GHOST_SALE_ERROR')) {
-                    return NextResponse.json({
-                        ok: false,
-                        code: 'GHOST_SALE',
-                        saleId: sale.id,
-                        error: error.message
-                    }, { status: 409 });
-                }
-                throw error; // Re-throw for general catch
+                    ok: false,
+                    error: "PAYMENT_NOT_APPROVED",
+                    statusCode: data.statusCode
+                }, { status: 400 });
             }
-        } else if (isCanceled) {
-            await prisma.$transaction([
-                prisma.sale.update({
-                    where: { id: sale.id },
-                    data: { status: SaleStatus.CANCELED }
-                }),
-                prisma.ticket.updateMany({
-                    where: {
-                        saleId: sale.id,
-                        raffleId: sale.raffleId || ''
-                    },
-                    data: { status: TicketStatus.AVAILABLE, saleId: null, reservedUntil: null, sessionId: null }
-                })
-            ]);
+
+            // At this point PayPhone confirmed PAID (3), so we sync our DB
+            // We can update PayPhone metadata here before finalizeSale
+            await prisma.sale.update({
+                where: { id: sale.id },
+                data: {
+                    payphonePaymentId: String(id),
+                    payphoneAuthorizationCode: String(data.authorizationCode || ''),
+                    payphoneStatusCode: data.statusCode,
+                } as any
+            });
         }
+
+        // Finalize the sale (promote tickets, mark PAID, send email)
+        const done = await finalizeSale(sale.id);
 
         return NextResponse.json({
             ok: true,
-            status: data.status,
-            statusCode: data.statusCode,
             saleId: sale.id,
-            ticketNumbers: []
+            numbers: done.numbers,
+            emailed: done.emailed,
+            idempotent: done.idempotent
         });
 
     } catch (error: any) {
-        console.error('[PayPhone Confirm API] Crash:', error);
-        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+        console.error('[PayPhone Confirm API] Error:', error);
+        const status = error.status || 500;
+        return NextResponse.json({
+            ok: false,
+            error: error.message || "INTERNAL_ERROR"
+        }, { status });
     }
 }

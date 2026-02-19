@@ -1,4 +1,4 @@
-
+import { prisma } from './prisma';
 import { Resend } from 'resend';
 
 
@@ -98,4 +98,60 @@ export async function sendTicketsEmail({
             error: error.message || 'Unknown crash'
         };
     }
+}
+
+function normalizeNumbers(input: any): number[] {
+    if (!input) return [];
+    if (Array.isArray(input)) return input.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+    if (typeof input === "string") {
+        try {
+            const parsed = JSON.parse(input);
+            if (Array.isArray(parsed)) return parsed.map((n) => Number(n)).filter((n) => Number.isFinite(n));
+        } catch { }
+    }
+    return [];
+}
+
+export async function sendSaleEmail(saleId: string) {
+    const sale = await prisma.sale.findUnique({
+        where: { id: saleId },
+        include: {
+            customer: true,
+            tickets: { select: { number: true }, orderBy: { number: "asc" } },
+        },
+    });
+
+    if (!sale) {
+        throw new Error("SALE_NOT_FOUND");
+    }
+
+    const email = sale.customer?.email;
+    if (!email) {
+        throw new Error("CUSTOMER_EMAIL_NOT_FOUND");
+    }
+
+    // Números: prioridad a tickets ligados; fallback a snapshot/solicitud
+    const linked = sale.tickets?.map((t: { number: number }) => t.number) ?? [];
+    const requested = normalizeNumbers(sale.ticketNumbers).length ? normalizeNumbers(sale.ticketNumbers) :
+        (normalizeNumbers(sale.requestedNumbers).length ? normalizeNumbers(sale.requestedNumbers) : []);
+
+    const numbers = (linked.length ? linked : requested).sort((a: number, b: number) => a - b);
+    const ticketsFormatted = numbers.map((n: number) => String(n).padStart(4, "0"));
+
+    const result = await sendTicketsEmail({
+        to: email,
+        customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
+        saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
+        tickets: ticketsFormatted,
+        total: sale.amountCents / 100
+    });
+
+    if (result.success) {
+        await prisma.sale.update({
+            where: { id: saleId },
+            data: { lastEmailSentAt: new Date(), lastError: null } as any
+        });
+    }
+
+    return { ok: result.success, numbers: ticketsFormatted, error: result.error };
 }
