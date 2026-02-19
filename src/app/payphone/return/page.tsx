@@ -28,10 +28,10 @@ function ReturnContent() {
         const id = searchParams.get('id');
         const clientTxId = searchParams.get('clientTransactionId');
 
-        if (!id) {
-            console.error("[RETURN] Missing ID in searchParams");
+        if (!id || id === '0') {
+            console.error("[RETURN] Missing or invalid ID in searchParams:", id);
             setStatus('error');
-            setMessage('No se encontró el ID de la transacción.');
+            setMessage('No se encontró el ID de la transacción o es inválido.');
             return;
         }
 

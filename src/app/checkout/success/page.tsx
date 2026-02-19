@@ -41,8 +41,11 @@ function SuccessContent() {
     };
 
     useEffect(() => {
-        if (!saleId) {
-            setState({ kind: "error", message: "Falta identificador de venta (saleId).", canRecover: false });
+        if (!saleId || saleId === '0') {
+            if (saleId === '0') {
+                console.warn("[SUCCESS] Invalid saleId='0' detected. Skipping confirmation.");
+            }
+            setState({ kind: "error", message: "Falta identificador de venta (saleId) o es inválido.", canRecover: false });
             return;
         }
 

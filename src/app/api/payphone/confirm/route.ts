@@ -18,21 +18,36 @@ export async function POST(req: Request) {
 
         const body = await req.json();
         // Support both PayPhone format (id/clientTransactionId) and direct polling (saleId)
-        const id = body?.id;
+        const id = body?.id ? String(body.id) : undefined;
         const clientTransactionId = body?.clientTransactionId;
         const saleId = body?.saleId;
 
         console.log(`[CONFIRM_API] Processing: id=${id}, clientTxId=${clientTransactionId}, saleId=${saleId}`);
 
-        // Find the sale
-        const sale = await prisma.sale.findFirst({
-            where: saleId ? { id: saleId } : { clientTransactionId },
+        // 1. Guard against invalid saleId="0"
+        if (saleId === "0") {
+            console.warn(`[CONFIRM_API] Received invalid saleId="0"`);
+            return NextResponse.json({ ok: true, status: "pending", message: "invalid saleId" }, { status: 202 });
+        }
+
+        // 2. Find the sale (try saleId, then clientTransactionId, then payphonePaymentId as fallback)
+        let sale = await prisma.sale.findFirst({
+            where: saleId ? { id: saleId } : (clientTransactionId ? { clientTransactionId } : { payphonePaymentId: id }),
             include: { tickets: true }
         });
 
+        // 3. Fallback to searching by PayPhone ID if provided and not found yet
+        if (!sale && id) {
+            sale = await prisma.sale.findFirst({
+                where: { payphonePaymentId: id },
+                include: { tickets: true }
+            });
+        }
+
         if (!sale) {
-            console.error(`[CONFIRM_API] Sale not found for: ${saleId || clientTransactionId}`);
-            return NextResponse.json({ ok: false, error: 'SALE_NOT_FOUND' }, { status: 404 });
+            console.error(`[CONFIRM_API] Sale not found for: saleId=${saleId}, clientTxId=${clientTransactionId}, payphoneId=${id}`);
+            // Return 202 (Accepted/Pending) instead of 404 to avoid triggering releases/reversals on external systems
+            return NextResponse.json({ ok: true, status: "pending", message: "sale not found yet" }, { status: 202 });
         }
 
         // Idempotency check: if already PAID, finalizeSale will handle it
