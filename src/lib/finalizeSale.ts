@@ -31,8 +31,20 @@ export async function finalizeSale(saleId: string) {
 
     if (!sale) throw httpError(404, "SALE_NOT_FOUND");
 
-    // ✅ Idempotencia: si ya está PAID y ya tiene tickets, devolvemos y NO reenviamos email
+    // ✅ Idempotencia: si ya está PAID y ya tiene tickets...
     if (sale.status === SaleStatus.PAID && (sale.tickets?.length || 0) > 0) {
+        // PERO si no se ha enviado el email, procedemos a enviarlo
+        if (!sale.lastEmailSentAt) {
+            console.log(`[FINALIZE] Sale ${saleId} was PAID but email missing. Retrying email...`);
+            await sendSaleEmail(sale.id);
+            return {
+                ok: true,
+                numbers: sale.tickets.map((t) => t.number),
+                emailed: true,
+                idempotent: true
+            };
+        }
+
         return {
             ok: true,
             numbers: sale.tickets.map((t) => t.number),

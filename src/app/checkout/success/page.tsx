@@ -55,19 +55,39 @@ function SuccessContent() {
         let isCancelled = false;
 
         const confirmWithBackoff = async () => {
-            // Polling backoff: 0s, 1.5s, 3s, 5s (max 4 attempts)
-            const delays = [0, 1500, 3000, 5000];
+            // Aumentamos los intentos a 8 para dar más tiempo (aprox 20-30s total)
+            const delays = [0, 1000, 2000, 3000, 4000, 5000, 5000, 5000];
 
             for (let i = 0; i < delays.length; i++) {
                 if (delays[i] > 0) await sleep(delays[i]);
                 if (isCancelled) return;
 
+                // Si por alguna razón el saleId es '0', re-intentamos leerlo de la URL por si React tardó
+                let currentId = saleId;
+                if (currentId === '0' || !currentId) {
+                    const params = new URLSearchParams(window.location.search);
+                    currentId = params.get('saleId');
+                }
+
+                if (!currentId || currentId === '0') {
+                    // Si sigue siendo 0 después de un par de intentos, fallamos
+                    if (i > 2) break;
+                    continue;
+                }
+
                 try {
                     const res = await fetch("/api/payphone/confirm", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ saleId }),
+                        body: JSON.stringify({ saleId: currentId }),
                     });
+
+                    // Si es 202 (Accepted/Pending), el backend dice "espera un poco"
+                    // Continuamos el loop sin cambiar el estado.
+                    if (res.status === 202) {
+                        console.log("[SUCCESS] Confirmation pending (202), retrying...");
+                        continue;
+                    }
 
                     const data = await res.json();
 
@@ -80,26 +100,24 @@ function SuccessContent() {
                                 kind: "success",
                                 numbers,
                                 emailed: !!data?.emailed,
-                                sale: { id: saleId, createdAt: new Date().toISOString() } // Simple fallback
+                                sale: { id: currentId, createdAt: new Date().toISOString() }
                             });
                         }
                         return;
                     }
 
-                    // 409 usually means tickets not available or ghost sale - definitely show error with recover
+                    // 409 usually means tickets not available - definitely show error
                     if (res.status === 409) {
                         if (!isCancelled) {
                             setState({
                                 kind: "error",
                                 message: data?.error ?? "No se pudieron asignar tus números automáticamente.",
                                 canRecover: true,
-                                saleId: saleId
+                                saleId: currentId
                             });
                         }
                         return;
                     }
-
-                    // For other errors, we continue polling unless it's the last attempt
                 } catch (err) {
                     console.error("[POLLING_ERROR]", err);
                 }
