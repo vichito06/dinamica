@@ -1,77 +1,91 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getSalesSearch } from '@/lib/json-db';
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-export async function GET(req: NextRequest) {
-    const searchParams = req.nextUrl.searchParams;
-    const q = (searchParams.get('q') || "").trim();
+export async function GET(request: Request) {
+    try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get('admin_session')?.value ?? cookieStore.get('admin_auth')?.value;
+        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
 
-    // 1. Get filtered sales
-    const sales = await getSalesSearch(q);
-
-    // 2. BOM for Excel UTF-8 compatibility
-    const BOM = "\ufeff";
-
-    // 3. Headers (using ; as separator)
-    const headers = [
-        "ID", "Cliente", "Cédula", "Email", "Teléfono", "Ciudad",
-        "CantTickets", "Total", "Fecha", "Tickets", "MétodoPago", "EstadoPago", "TransacciónID"
-    ];
-
-    // Helper to escape CSV fields
-    const escape = (value: any) => {
-        const s = String(value ?? "");
-        // If content has ; " \n, wrap in quotes and double internal quotes
-        if (/[;"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-        return s;
-    };
-
-    // Helper to format tickets
-    // Using ="0123" trick for Excel to preserve leading zeros if needed, 
-    // OR just raw string if users prefer. User snippet suggested: `="${String(t).padStart(4, "0")}"`
-    // But also said: "Si NO quieres lo de ="0296", usa: String(t)"
-    // I will use just the number string padded, but not the ="..." formula by default unless strictly requested to force text mode,
-    // as ="..." can be annoying if you want to copy-paste.
-    // However, the user snippet explicitly showed: const formatTicketAsText = (t) => ...
-    // "Formato de tickets (muy importante)... No truncar jamás"
-    // I'll stick to a simple pipe separation first.
-    // User snippet has: const formatTicketAsText = (t) => `="${String(t).padStart(4, "0")}"`;
-    // I will apply the padding to be safe.
-    const rows = sales.map(sale => {
-        const c = sale.customer || {} as any;
-
-        // Join tickets with pipe |
-        const tickets = (sale.tickets || []).map(t => t.padStart(4, '0')).join("|");
-
-        return [
-            sale.id,
-            // Cliente: Name reconstruction
-            (c.lastName && c.firstName) ? `${c.lastName} ${c.firstName}`.trim() : (c.fullName || "Cliente"),
-            c.idNumber || "",
-            c.email || "",
-            c.phone || "",
-            c.city || "",
-            sale.tickets?.length || 0,
-            sale.total || 0,
-            sale.date ? new Date(sale.date).toLocaleString('es-EC') : "",
-            tickets,
-            // Placeholders for future payment fields if they don't exist yet
-            (sale as any).paymentMethod || "",
-            (sale as any).paymentStatus || "",
-            (sale as any).transactionId || ""
-        ].map(escape).join(";");
-    });
-
-    const csvContent = BOM + headers.join(";") + "\n" + rows.join("\n");
-
-    const filename = `ventas_${new Date().toISOString().slice(0, 10)}.csv`;
-
-    return new NextResponse(csvContent, {
-        status: 200,
-        headers: {
-            'Content-Type': 'text/csv; charset=utf-8',
-            'Content-Disposition': `attachment; filename="${filename}"`
+        if (!session || session !== secret) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
-    });
+
+        const { searchParams } = new URL(request.url);
+        const q = searchParams.get('q') || '';
+
+        // Get Active Raffle
+        const activeRaffle = await prisma.raffle.findFirst({ where: { status: 'ACTIVE' } });
+
+        let where: any = { status: 'PAID' };
+        if (activeRaffle) {
+            where.raffleId = activeRaffle.id;
+        }
+
+        if (q) {
+            where.OR = [
+                { id: { contains: q, mode: 'insensitive' } },
+                { customer: { firstName: { contains: q, mode: 'insensitive' } } },
+                { customer: { lastName: { contains: q, mode: 'insensitive' } } },
+                { customer: { idNumber: { contains: q, mode: 'insensitive' } } },
+                { tickets: { some: { number: isNaN(parseInt(q)) ? -1 : parseInt(q) } } }
+            ];
+        }
+
+        const sales = await prisma.sale.findMany({
+            where,
+            include: {
+                customer: true,
+                tickets: true
+            },
+            orderBy: { confirmedAt: 'desc' }
+        });
+
+        // Build CSV columns
+        const headers = [
+            'ID Venta',
+            'Fecha Pago',
+            'Cliente',
+            'Cédula',
+            'Email',
+            'Teléfono',
+            'Ciudad',
+            'Monto',
+            'Tickets Count',
+            'Números'
+        ];
+
+        const rows = sales.map(s => [
+            s.id,
+            s.confirmedAt ? s.confirmedAt.toISOString() : '',
+            `${s.customer?.firstName || ''} ${s.customer?.lastName || ''}`.trim(),
+            s.customer?.idNumber || '',
+            s.customer?.email || '',
+            s.customer?.phone || '',
+            s.customer?.city || '',
+            (s.amountCents / 100).toFixed(2),
+            s.tickets.length,
+            (s.tickets || []).map(t => String(t.number).padStart(4, '0')).join(' - ')
+        ]);
+
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        ].join('\n');
+
+        return new Response(csvContent, {
+            headers: {
+                'Content-Type': 'text/csv; charset=utf-8',
+                'Content-Disposition': `attachment; filename="ventas_${new Date().toISOString().split('T')[0]}.csv"`
+            }
+        });
+
+    } catch (error: any) {
+        console.error('[Export CSV] Error:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }

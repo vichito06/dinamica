@@ -822,7 +822,7 @@ function PersonalDataForm({ data, setData, onSubmit, loading, selectedNumbers, l
                         className="w-5 h-5 mt-1 rounded border-white/20 bg-black/40 text-green-500 focus:ring-green-500 focus:ring-offset-0 cursor-pointer"
                     />
                     <label htmlFor="terms" className="text-sm text-white/80 cursor-pointer select-none leading-relaxed">
-                        Acepto los <Link href="/terms" target="_blank" className="text-white font-bold hover:underline decoration-white/30">Términos y Condiciones</Link> y la <Link href="/policy" target="_blank" className="text-white font-bold hover:underline decoration-white/30">Política de Privacidad</Link>. Entiendo que mis datos serán tratados para la gestión de esta dinámica.
+                        Acepto los <Link href="/terminos" target="_blank" className="text-white font-bold hover:underline decoration-white/30">Términos y Condiciones</Link> y la <Link href="/privacidad" target="_blank" className="text-white font-bold hover:underline decoration-white/30">Política de Privacidad</Link>. Entiendo que los boletos <b>no son reembolsables</b> y autorizo el tratamiento de mis datos para esta dinámica.
                     </label>
                 </div>
 

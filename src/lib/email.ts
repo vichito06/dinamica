@@ -6,17 +6,23 @@ import { Resend } from 'resend';
 interface SendTicketsParams {
     to: string;
     customerName: string;
-    saleCode: string;
+    idNumber: string;
+    saleCode: string; // The short code (usually last 6 chars)
+    saleId: string;   // The full ID
     tickets: string[];
     total?: number;
+    date?: Date;
 }
 
 export async function sendTicketsEmail({
     to,
     customerName,
+    idNumber,
     saleCode,
+    saleId,
     tickets,
-    total
+    total,
+    date
 }: SendTicketsParams) {
     const apiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.EMAIL_FROM;
@@ -38,30 +44,52 @@ export async function sendTicketsEmail({
 
     const safeName = customerName?.trim() || 'Cliente';
     const safeTotal = typeof total === 'number' ? total.toFixed(2) : null;
+    const formattedDate = (date || new Date()).toLocaleString('es-EC', {
+        timeZone: 'America/Guayaquil',
+        dateStyle: 'long',
+        timeStyle: 'short'
+    });
 
     const ticketListHtml = tickets.map(t =>
-        `<span style="padding:6px 10px;border:1px solid #ddd;border-radius:10px;font-weight:bold;font-family:monospace;margin:2px;">${t}</span>`
+        `<span style="display:inline-block;padding:8px 12px;border:2px solid #6d28d9;border-radius:12px;font-weight:bold;font-family:monospace;margin:4px;font-size:16px;color:#6d28d9;background:#f5f3ff;">${t}</span>`
     ).join('');
 
     const htmlContent = `
-    <div style="font-family:Arial,sans-serif;line-height:1.4;max-width:600px;margin:0 auto;color:#333;">
-      <h2 style="color:#6d28d9;">🎟️ Tus números - Y Voss Oeee</h2>
-      <p>Hola <b>${safeName}</b>, tu compra fue confirmada.</p>
-      
-      <div style="background:#f9fafb;padding:15px;border-radius:8px;margin:15px 0;">
-        <p style="margin:5px 0;"><b>Compra:</b> #${saleCode}</p>
-        ${safeTotal ? `<p style="margin:5px 0;"><b>Total:</b> $${safeTotal}</p>` : ''}
+    <div style="font-family:Arial,sans-serif;line-height:1.6;max-width:600px;margin:0 auto;color:#333;border:1px solid #eee;border-radius:16px;overflow:hidden;">
+      <div style="background:#6d28d9;padding:30px;text-align:center;color:white;">
+        <h1 style="margin:0;font-size:24px;">🎟️ ¡Compra Confirmada!</h1>
+        <p style="margin:10px 0 0;opacity:0.9;">Y Voss Oeee - Dinámica 1</p>
       </div>
 
-      <h3 style="margin-top:20px;">Tus Números de la Suerte:</h3>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
-        ${ticketListHtml}
-      </div>
+      <div style="padding:30px;">
+        <p>Hola <b>${safeName}</b>,</p>
+        <p>Tus tickets han sido generados exitosamente. Aquí tienes los detalles de tu participación:</p>
+        
+        <div style="background:#f9fafb;padding:20px;border-radius:12px;margin:20px 0;border:1px solid #f1f5f9;">
+          <table style="width:100%;font-size:14px;">
+            <tr><td style="color:#64748b;padding-bottom:5px;">Nombre:</td><td style="font-weight:bold;padding-bottom:5px;">${safeName}</td></tr>
+            <tr><td style="color:#64748b;padding-bottom:5px;">Identificación:</td><td style="font-weight:bold;padding-bottom:5px;">${idNumber}</td></tr>
+            <tr><td style="color:#64748b;padding-bottom:5px;">Orden ID:</td><td style="font-weight:bold;padding-bottom:5px;font-family:monospace;">${saleId}</td></tr>
+            <tr><td style="color:#64748b;padding-bottom:5px;">Código:</td><td style="font-weight:bold;padding-bottom:5px;color:#6d28d9;">#${saleCode}</td></tr>
+            <tr><td style="color:#64748b;padding-bottom:5px;">Fecha:</td><td style="font-weight:bold;padding-bottom:5px;">${formattedDate}</td></tr>
+            ${safeTotal ? `<tr><td style="color:#64748b;">Total Pagado:</td><td style="font-weight:bold;font-size:16px;color:#059669;">$${safeTotal}</td></tr>` : ''}
+          </table>
+        </div>
 
-      <p style="margin-top:20px;font-size:12px;color:#666;">
-        Gracias por participar 💜<br>
-        Este es un correo automático, por favor no respondas.
-      </p>
+        <h3 style="margin:30px 0 15px;text-align:center;color:#1e293b;">Tus Números de la Suerte:</h3>
+        <div style="text-align:center;margin-bottom:30px;">
+          ${ticketListHtml}
+        </div>
+
+        <div style="background:#fff7ed;padding:15px;border-radius:12px;border:1px solid #ffedd5;font-size:13px;color:#9a3412;">
+          <b>Nota Importante:</b> Este correo es tu comprobante oficial de participación. No es reembolsable. Los ganadores serán anunciados por nuestros canales oficiales.
+        </div>
+
+        <p style="margin-top:30px;font-size:12px;color:#64748b;text-align:center;">
+          Gracias por participar y mucha suerte 💜<br>
+          <span style="opacity:0.7;">Este es un mensaje automático, por favor no respondas.</span>
+        </p>
+      </div>
     </div>
     `;
 
@@ -70,33 +98,20 @@ export async function sendTicketsEmail({
         const { data, error } = await resend.emails.send({
             from: fromEmail,
             to,
-            subject: `🎟️ Tus Tickets de la Suerte - Compra #${saleCode}`,
+            subject: `🎟️ Tus Tickets - Sorteo Dinámica (#${saleCode})`,
             html: htmlContent,
         });
 
         if (error) {
-            // Check for rate limit or other specific errors
-            const isRateLimit = (error as any).statusCode === 429;
-            console.error(`[Email] Resend error for Sale #${saleCode}:`, {
-                name: error.name,
-                message: error.message,
-                isRateLimit
-            });
-            return {
-                success: false,
-                error: error.message,
-                isRateLimit
-            };
+            console.error(`[Email] Resend error for Sale #${saleId}:`, error);
+            return { success: false, error: error.message };
         }
 
         console.log(`[Email] Successfully sent to ${to} | Resend ID: ${data?.id}`);
         return { success: true, data };
     } catch (error: any) {
-        console.error(`[Email] Critical crash sending email for Sale #${saleCode}:`, error);
-        return {
-            success: false,
-            error: error.message || 'Unknown crash'
-        };
+        console.error(`[Email] Critical crash sending email:`, error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -141,9 +156,12 @@ export async function sendSaleEmail(saleId: string) {
     const result = await sendTicketsEmail({
         to: email,
         customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
+        idNumber: sale.customer.idNumber,
         saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
+        saleId: sale.id,
         tickets: ticketsFormatted,
-        total: sale.amountCents / 100
+        total: sale.amountCents / 100,
+        date: sale.confirmedAt || sale.createdAt
     });
 
     if (result.success) {

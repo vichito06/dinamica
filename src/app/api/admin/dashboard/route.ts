@@ -156,6 +156,34 @@ export async function GET(req: Request) {
             };
         }));
 
+        // Fetch Recent Sales & Tickets for the Dashboard View
+        const [recentSales, recentTickets] = await Promise.all([
+            prisma.sale.findMany({
+                where: {
+                    raffleId: activeRaffle.id,
+                    status: 'PAID',
+                    confirmedAt: { gte: dateFrom, lte: dateTo }
+                },
+                include: { customer: true },
+                orderBy: { confirmedAt: 'desc' },
+                take: 50
+            }),
+            prisma.ticket.findMany({
+                where: {
+                    raffleId: activeRaffle.id,
+                    status: 'SOLD',
+                    soldAt: { gte: dateFrom, lte: dateTo }
+                },
+                include: {
+                    sale: {
+                        include: { customer: true }
+                    }
+                },
+                orderBy: { soldAt: 'desc' },
+                take: 50
+            })
+        ]);
+
         return NextResponse.json({
             ok: true,
             raffle: {
@@ -173,6 +201,18 @@ export async function GET(req: Request) {
                 ticketsTotal,
                 ticketsAvailableCount: ticketsAvailable
             },
+            recentSales: recentSales.map(s => ({
+                id: s.id,
+                clientTransactionId: s.clientTransactionId,
+                amount: s.amountCents / 100,
+                confirmedAt: s.confirmedAt,
+                customer: s.customer,
+                ticketNumbers: s.requestedNumbers || [] // Fallback
+            })),
+            recentTickets: recentTickets.map(t => ({
+                ...t,
+                customer: t.sale?.customer || null
+            })),
             dailyTrends: dailyData
         });
 

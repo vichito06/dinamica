@@ -3,12 +3,19 @@ import { NextResponse } from "next/server";
 import { SaleStatus } from "@prisma/client";
 import { payphoneRequestWithRetry } from "@/lib/payphoneClient";
 import { finalizeSale } from "@/lib/finalizeSale";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
     try {
+        const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+        const rl = await rateLimit(`confirm:${ip}`, 10, 60);
+        if (!rl.success) {
+            return NextResponse.json({ ok: false, error: 'Demasiados intentos. Por favor espere.' }, { status: 429 });
+        }
+
         const body = await req.json();
         // Support both PayPhone format (id/clientTransactionId) and direct polling (saleId)
         const id = body?.id;

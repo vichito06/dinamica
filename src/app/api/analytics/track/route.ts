@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
     try {
+        const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || "127.0.0.1";
+        const rl = await rateLimit(`track:${ip}`, 30, 60);
+        if (!rl.success) {
+            return NextResponse.json({ ok: false, error: 'Rate limit exceeded' }, { status: 429 });
+        }
+
         const body = await req.json().catch(() => ({}));
 
         const event = String(body?.event || "");

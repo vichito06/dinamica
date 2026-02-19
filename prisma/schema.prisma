@@ -125,3 +125,10 @@ enum TicketStatus {
 enum PaymentProvider {
   PAYPHONE
 }
+
+model RateLimit {
+  key       String   @id
+  points    Int      @default(0)
+  expireAt  DateTime
+  updatedAt DateTime @updatedAt
+}

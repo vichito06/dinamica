@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { Prisma, TicketStatus } from '@prisma/client';
 import { cookies } from 'next/headers';
+import { rateLimit } from '@/lib/rate-limit';
 
 // Explicitly set max duration for long-running transactions (Vercel Support)
 export const maxDuration = 60;
@@ -12,18 +13,18 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
     let requestId = "req_" + Date.now();
     try {
-        // Safe requestId generation with globalThis fallback
-        try {
-            requestId = (globalThis as any).crypto?.randomUUID?.() || requestId;
-        } catch (e) { }
-
-        const jar = await cookies();
-        const session = jar.get('admin_session')?.value ?? jar.get('admin_auth')?.value;
-        const secret = (process.env.ADMIN_SESSION_SECRET ?? "").trim();
-        const isAdmin = session && session === secret;
-
         const body = await request.json();
         const { ticketNumbers: bodyTicketNumbers, tickets: bodyTickets, sessionId } = body;
+
+        // Rate limit by Session ID
+        if (sessionId) {
+            const rl = await rateLimit(`reserve:${sessionId}`, 10, 60);
+            if (!rl.success) {
+                return NextResponse.json({ ok: false, error: 'Demasiadas solicitudes de reserva. Intente en un minuto.', code: 'RATE_LIMIT' }, { status: 429 });
+            }
+        }
+
+        // Safe requestId generation with globalThis fallback
         const tickets = bodyTicketNumbers || bodyTickets;
 
         // 1. Validation & Sanitization
