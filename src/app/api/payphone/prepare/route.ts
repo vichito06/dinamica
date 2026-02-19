@@ -124,7 +124,9 @@ export async function POST(req: Request) {
 
         // OJO: usa URL() para que nunca metas espacios raros
         const returnUrl = new URL("/payphone/return", origin);
-        returnUrl.searchParams.set("id", String(sale.payphonePaymentId || "0"));
+        if (sale.payphonePaymentId && sale.payphonePaymentId !== "0") {
+            returnUrl.searchParams.set("id", String(sale.payphonePaymentId));
+        }
         returnUrl.searchParams.set("clientTransactionId", sale.id);
 
         const cancelUrl = new URL("/checkout/cancel", origin);

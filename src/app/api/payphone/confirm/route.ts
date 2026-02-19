@@ -24,15 +24,12 @@ export async function POST(req: Request) {
 
         console.log(`[CONFIRM_API] Processing: id=${id}, clientTxId=${clientTransactionId}, saleId=${saleId}`);
 
-        // 1. Guard against invalid saleId="0"
-        if (saleId === "0") {
-            console.warn(`[CONFIRM_API] Received invalid saleId="0"`);
-            return NextResponse.json({ ok: true, status: "pending", message: "invalid saleId" }, { status: 202 });
-        }
+        // 1. Sale ID Cleanup
+        const effectiveSaleId = (saleId && saleId !== "0") ? saleId : undefined;
 
-        // 2. Find the sale (try saleId, then clientTransactionId, then payphonePaymentId as fallback)
+        // 2. Find the sale (try effectiveSaleId, then clientTransactionId, then payphonePaymentId as fallback)
         let sale = await prisma.sale.findFirst({
-            where: saleId ? { id: saleId } : (clientTransactionId ? { clientTransactionId } : { payphonePaymentId: id }),
+            where: effectiveSaleId ? { id: effectiveSaleId } : (clientTransactionId ? { clientTransactionId } : { payphonePaymentId: id }),
             include: { tickets: true }
         });
 

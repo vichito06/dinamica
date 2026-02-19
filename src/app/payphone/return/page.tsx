@@ -28,26 +28,34 @@ function ReturnContent() {
         const id = searchParams.get('id');
         const clientTxId = searchParams.get('clientTransactionId');
 
-        if (!id || id === '0') {
-            console.error("[RETURN] Missing or invalid ID in searchParams:", id);
+        // [SOLUCIÓN] No fallar si id es '0' o falta, siempre que tengamos clientTxId
+        const effectiveId = (id && id !== '0') ? id : null;
+
+        if (!effectiveId && !clientTxId) {
+            console.error("[RETURN] Missing identifiers in searchParams.");
             setStatus('error');
-            setMessage('No se encontró el ID de la transacción o es inválido.');
+            setMessage('No se encontró el ID de la transacción. Intenta refrescar.');
             return;
         }
 
-        setSaleId(id);
-        console.log(`[RETURN] Starting confirmation for saleId=${id} | clientTxId=${clientTxId}`);
+        const confirmSaleId = clientTxId || effectiveId; // Priorizar TX interno
+        setSaleId(confirmSaleId);
+
+        console.log(`[RETURN] Starting confirmation for id=${id} | clientTxId=${clientTxId} | using=${confirmSaleId}`);
 
         // [SEV-MOBILE] Hard Redirect Timeout (10s)
         const timeout = setTimeout(() => {
-            console.log(`[RETURN] Timeout reached for ${id}. Redirecting to success page.`);
+            console.log(`[RETURN] Timeout reached for ${confirmSaleId}. Redirecting to success page.`);
             router.push(`/checkout/success?saleId=${clientTxId || id}&id=${id}`);
         }, 10000);
 
         const confirmPayment = async () => {
-            const key = `confirm_done_${id}`;
+            const currentId = confirmSaleId;
+            if (!currentId) return;
+
+            const key = `confirm_done_${currentId}`;
             if (safeSessionGet(key)) {
-                console.log("[RETURN] Already confirmed in this session:", id);
+                console.log("[RETURN] Already confirmed in this session:", currentId);
                 router.push(`/checkout/success?saleId=${clientTxId || id}&id=${id}`);
                 return;
             }
@@ -56,7 +64,11 @@ function ReturnContent() {
                 const response = await fetch('/api/payphone/confirm', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, saleId: id, clientTransactionId: clientTxId }),
+                    body: JSON.stringify({
+                        id: effectiveId,
+                        saleId: currentId,
+                        clientTransactionId: clientTxId
+                    }),
                     cache: 'no-store'
                 });
 
