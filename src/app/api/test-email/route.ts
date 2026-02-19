@@ -25,9 +25,12 @@ export async function GET(req: Request) {
     const result = await sendTicketsEmail({
         to,
         customerName: "Cliente de Prueba",
+        idNumber: "0000000000",
         saleCode: "TEST-1234",
+        saleId: "test-sale-id",
         tickets: ["0007", "0123", "0456"],
         total: 10,
+        date: new Date()
     });
 
     return NextResponse.json(result);
@@ -61,9 +64,12 @@ export async function POST(request: Request) {
     const result = await sendTicketsEmail({
         to,
         customerName: "Cliente de Prueba",
+        idNumber: "0000000000",
         saleCode: "TEST-1234",
+        saleId: "test-sale-id",
         tickets: ["0007", "0123", "0456"],
         total: 10,
+        date: new Date()
     });
 
     return NextResponse.json(result);

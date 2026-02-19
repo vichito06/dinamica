@@ -94,9 +94,12 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
                     await sendTicketsEmail({
                         to: sale.customer.email,
                         customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
+                        idNumber: sale.customer.idNumber,
                         saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
+                        saleId: sale.id,
                         tickets: ticketNumbers,
-                        total: sale.amountCents / 100
+                        total: sale.amountCents / 100,
+                        date: sale.confirmedAt || sale.createdAt
                     });
 
                     await prisma.sale.update({
