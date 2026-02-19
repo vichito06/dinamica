@@ -69,7 +69,7 @@ function SuccessContent() {
                     currentId = params.get('saleId');
                 }
 
-                if (!currentId || currentId === '0') {
+                if (typeof currentId !== 'string' || currentId === '0') {
                     // Si sigue siendo 0 después de un par de intentos, fallamos
                     if (i > 2) break;
                     continue;
