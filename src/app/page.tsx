@@ -1,14 +1,18 @@
 import Image from 'next/image';
 import { getSettings } from '@/lib/json-db';
 import HomeClient from '@/components/HomeClient';
+import LandingVisitTracker from '@/components/analytics/LandingVisitTracker';
+import { getActiveRaffleId } from '@/lib/raffle';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
   const settings = await getSettings();
+  const raffleId = await getActiveRaffleId();
 
   return (
     <main className="min-h-screen dark">
+      <LandingVisitTracker raffleId={raffleId} />
       {/* Logo Header - NO ADMIN LINK */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-black/90 backdrop-blur-xl border-b border-white/10">
         <div className="container-custom py-3 flex items-center justify-center">

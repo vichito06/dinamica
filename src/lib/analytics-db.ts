@@ -57,9 +57,10 @@ export async function incrementAnalytics(type: string, path?: string, sessionId?
             }),
             prisma.analyticsEvent.create({
                 data: {
-                    type,
+                    event: type,
                     path: path || null,
-                    sessionId: sessionId || null
+                    visitorId: sessionId || null,
+                    raffleId: 'legacy' // fallback for old calls
                 }
             })
         ]);

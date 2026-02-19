@@ -69,7 +69,7 @@ export async function GET(req: Request) {
         const visitsToday = await prisma.analyticsEvent.count({
             where: {
                 raffleId: activeRaffle.id,
-                type: 'pageview',
+                event: 'LANDING_VISIT',
                 createdAt: { gte: todayStart }
             }
         });
@@ -96,7 +96,7 @@ export async function GET(req: Request) {
             const dayVisits = await prisma.analyticsEvent.count({
                 where: {
                     raffleId: activeRaffle.id,
-                    type: 'pageview',
+                    event: 'LANDING_VISIT',
                     createdAt: { gte: start, lte: end }
                 }
             });

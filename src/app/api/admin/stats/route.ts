@@ -48,7 +48,7 @@ export async function GET() {
             // Visitas hoy (AnalyticsEvent scoped)
             prisma.analyticsEvent.count({
                 where: {
-                    type: 'pageview',
+                    event: 'LANDING_VISIT',
                     raffleId,
                     createdAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) }
                 }

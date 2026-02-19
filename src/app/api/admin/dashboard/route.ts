@@ -1,9 +1,27 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { startOfDay, endOfDay, eachDayOfInterval, format, parseISO } from "date-fns";
+import { eachDayOfInterval, format } from "date-fns";
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+function dayStartUTC(dateStr: string) {
+    // dateStr: "2026-02-18"
+    // Ecuador -05:00 => inicio local = 00:00 -05:00 => UTC = 05:00Z
+    return new Date(`${dateStr}T05:00:00.000Z`);
+}
+
+function dayEndUTC(dateStr: string) {
+    // fin local 23:59:59 -05:00 => UTC = 04:59:59 del día siguiente
+    const [y, m, day] = dateStr.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, day));
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getUTCDate()).padStart(2, "0");
+    const nextDayStr = `${yy}-${mm}-${dd}`;
+    return new Date(`${nextDayStr}T04:59:59.999Z`);
+}
 
 export async function GET(req: Request) {
     try {
@@ -11,8 +29,12 @@ export async function GET(req: Request) {
         const from = searchParams.get('from');
         const to = searchParams.get('to');
 
-        const dateFrom = from ? startOfDay(parseISO(from)) : startOfDay(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
-        const dateTo = to ? endOfDay(parseISO(to)) : endOfDay(new Date());
+        // Default to last 7 days if no dates provided
+        const startDateStr = from || format(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd');
+        const endDateStr = to || format(new Date(), 'yyyy-MM-dd');
+
+        const dateFrom = dayStartUTC(startDateStr);
+        const dateTo = dayEndUTC(endDateStr);
 
         // Get Active Raffle
         const activeRaffle = await prisma.raffle.findFirst({
@@ -36,7 +58,7 @@ export async function GET(req: Request) {
             prisma.analyticsEvent.count({
                 where: {
                     raffleId: activeRaffle.id,
-                    type: 'LANDING_VISIT',
+                    event: 'LANDING_VISIT',
                     createdAt: { gte: dateFrom, lte: dateTo }
                 }
             }),
@@ -88,19 +110,22 @@ export async function GET(req: Request) {
         const totalSoldAmount = (sales._sum.amountCents || 0) / 100;
 
         // Daily Trends
-        const days = eachDayOfInterval({ start: dateFrom, end: dateTo });
+        const days = eachDayOfInterval({
+            start: new Date(startDateStr + 'T00:00:00Z'),
+            end: new Date(endDateStr + 'T00:00:00Z')
+        });
 
         // Fetch daily data for the interval
         const dailyData = await Promise.all(days.map(async (day) => {
-            const start = startOfDay(day);
-            const end = endOfDay(day);
             const dateStr = format(day, 'yyyy-MM-dd');
+            const start = dayStartUTC(dateStr);
+            const end = dayEndUTC(dateStr);
 
             const [v, s, t] = await Promise.all([
                 prisma.analyticsEvent.count({
                     where: {
                         raffleId: activeRaffle.id,
-                        type: 'LANDING_VISIT',
+                        event: 'LANDING_VISIT',
                         createdAt: { gte: start, lte: end }
                     }
                 }),

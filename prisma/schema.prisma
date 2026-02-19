@@ -24,14 +24,14 @@ model Analytics {
 
 model AnalyticsEvent {
   id        String   @id @default(cuid())
-  type      String   // pageview, unique, etc
+  event     String
+  raffleId  String
+  visitorId String?
   path      String?
-  sessionId String?
+  userAgent String?
   createdAt DateTime @default(now())
-  raffleId  String?
-  raffle    Raffle?  @relation(fields: [raffleId], references: [id])
 
-  @@index([type, createdAt, raffleId])
+  @@index([raffleId, event, createdAt])
 }
 
 model Raffle {
@@ -42,7 +42,6 @@ model Raffle {
   updatedAt DateTime     @updatedAt
   sales     Sale[]
   tickets   Ticket[]
-  events    AnalyticsEvent[]
 }
 
 model Ticket {
@@ -52,10 +51,10 @@ model Ticket {
   reservedUntil DateTime?
   saleId        String?
   sessionId     String?
-  sale          Sale?        @relation(fields: [saleId], references: [id])
   raffleId      String
-  raffle        Raffle       @relation(fields: [raffleId], references: [id])
   soldAt        DateTime?
+  raffle        Raffle       @relation(fields: [raffleId], references: [id])
+  sale          Sale?        @relation(fields: [saleId], references: [id])
 
   @@unique([raffleId, number])
   @@index([status, reservedUntil, raffleId])
@@ -78,15 +77,15 @@ model Sale {
   payphoneStatusCode        Int?
   payWithCardUrl            String?
   preparedAt                DateTime?
-  customer                  Customer        @relation(fields: [customerId], references: [id])
-  tickets                   Ticket[]
   requestedNumbers          String[]        @default([])
   ticketNumbers             String[]        @default([])
   lastEmailSentAt           DateTime?
+  raffleId                  String?
   lastError                 String?
   lastErrorAt               DateTime?
-  raffleId                  String?
+  customer                  Customer        @relation(fields: [customerId], references: [id])
   raffle                    Raffle?         @relation(fields: [raffleId], references: [id])
+  tickets                   Ticket[]
 
   @@index([status, confirmedAt, raffleId])
 }
