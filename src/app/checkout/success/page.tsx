@@ -63,7 +63,7 @@ function SuccessContent() {
                 if (isCancelled) return;
 
                 // Si por alguna razón el saleId es '0', re-intentamos leerlo de la URL por si React tardó
-                let currentId = saleId;
+                let currentId: string | null = saleId;
                 if (currentId === '0' || !currentId) {
                     const params = new URLSearchParams(window.location.search);
                     currentId = params.get('saleId');
