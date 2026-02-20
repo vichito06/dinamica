@@ -113,12 +113,16 @@ export async function finalizeSale(saleId: string) {
 
     // ✅ Email: se envía solo cuando realmente finalizamos (no en idempotent)
     console.log(`[FINALIZE] Success for sale ${saleId}, sending email...`);
-    await sendSaleEmail(sale.id);
+    const emailResult = await sendSaleEmail(sale.id);
+
+    if (!emailResult.ok) {
+        console.error(`[FINALIZE] Email failed for sale ${saleId}:`, emailResult.error);
+    }
 
     return {
         ok: true,
-        numbers: result,
-        emailed: true,
+        numbers: result.map(n => String(n).padStart(4, "0")),
+        emailed: emailResult.ok,
         idempotent: false
     };
 }

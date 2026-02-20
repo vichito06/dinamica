@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { SaleStatus, TicketStatus } from "@prisma/client";
 import { confirmPayphonePayment, PayPhoneConfirmResult } from "./payphoneConfirm";
 import { promoteTicketsForSale } from "./ticketPromotion";
-import { sendTicketsEmail } from "./email";
+import { sendSaleEmail } from "./email";
 
 export interface ReconcileResult {
     ok: boolean;
@@ -35,7 +35,10 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
             });
 
             // Si ya está pagado pero no se ha enviado el email, podemos intentar re-enviarlo aquí
-            // (Opcional, pero robusto)
+            if (sale.customer && !sale.lastEmailSentAt) {
+                console.log(`[Reconcile] IDEMPOTENCY: Sale ${sale.id} is PAID but email missing. Retrying...`);
+                await sendSaleEmail(sale.id);
+            }
             return { ok: true, status: 'PAID', saleId: sale.id, ticketNumbers, alreadyPaid: true };
         } catch (err: any) {
             return { ok: true, status: 'PAID', saleId: sale.id, ticketNumbers: [], alreadyPaid: true, error: `Ya pagado, pero error al sincronizar tickets: ${err.message}` };
@@ -89,30 +92,12 @@ export async function reconcileSale(saleId: string): Promise<ReconcileResult> {
 
             // 3. Email de Confirmación (Post-Transacción, Idempotente)
             if (sale.customer && !sale.lastEmailSentAt) {
-                try {
-                    console.log(`[EMAIL] Attempting confirm email for sale ${sale.id} to ${sale.customer.email}`);
-                    await sendTicketsEmail({
-                        to: sale.customer.email,
-                        customerName: `${sale.customer.firstName} ${sale.customer.lastName}`,
-                        idNumber: sale.customer.idNumber,
-                        saleCode: sale.clientTransactionId.slice(-6).toUpperCase(),
-                        saleId: sale.id,
-                        tickets: ticketNumbers,
-                        total: sale.amountCents / 100,
-                        date: sale.confirmedAt || sale.createdAt
-                    });
-
-                    await prisma.sale.update({
-                        where: { id: sale.id },
-                        data: { lastEmailSentAt: new Date() } as any
-                    });
+                console.log(`[EMAIL] Triggering email for sale ${sale.id} to ${sale.customer.email}`);
+                const emailResult = await sendSaleEmail(sale.id);
+                if (emailResult.ok) {
                     console.log(`[EMAIL] SUCCESS for sale ${sale.id}`);
-                } catch (e: any) {
-                    console.error(`[EMAIL] FAILED for sale ${sale.id}:`, e.message);
-                    await prisma.sale.update({
-                        where: { id: sale.id },
-                        data: { lastError: `EMAIL_FAILED: ${e.message}`, lastErrorAt: new Date() } as any
-                    }).catch(() => { });
+                } else {
+                    console.error(`[EMAIL] FAILED for sale ${sale.id}:`, emailResult.error);
                 }
             }
 

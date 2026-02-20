@@ -167,8 +167,23 @@ export async function sendSaleEmail(saleId: string) {
     if (result.success) {
         await prisma.sale.update({
             where: { id: saleId },
-            data: { lastEmailSentAt: new Date(), lastError: null } as any
+            data: {
+                lastEmailSentAt: new Date(),
+                lastError: null,
+                // Also update ticketNumbers in DB if not already present
+                ...(sale.ticketNumbers.length === 0 ? { ticketNumbers: ticketsFormatted } : {})
+            } as any
         });
+        console.log(`[Email] Success status updated in DB for sale ${saleId}`);
+    } else {
+        console.error(`[Email] Error sending to ${email}: ${result.error}`);
+        await prisma.sale.update({
+            where: { id: saleId },
+            data: {
+                lastError: `EMAIL_FAILED: ${result.error}`,
+                lastErrorAt: new Date()
+            } as any
+        }).catch(() => { });
     }
 
     return { ok: result.success, numbers: ticketsFormatted, error: result.error };
