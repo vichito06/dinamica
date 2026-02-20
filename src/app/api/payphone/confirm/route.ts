@@ -28,22 +28,23 @@ export async function POST(req: Request) {
         const effectiveSaleId = (saleId && saleId !== "0") ? saleId : undefined;
 
         // 2. Find the sale (try effectiveSaleId, then clientTransactionId, then payphonePaymentId as fallback)
+        // [RESILIENCE] Search by id directly if it looks like a CUID or if explicitly passed
         let sale = await prisma.sale.findFirst({
-            where: effectiveSaleId ? { id: effectiveSaleId } : (clientTransactionId ? { clientTransactionId } : { payphonePaymentId: id }),
+            where: {
+                OR: [
+                    { id: effectiveSaleId },
+                    { id: clientTransactionId },
+                    { clientTransactionId: clientTransactionId },
+                    { clientTransactionId: effectiveSaleId },
+                    { payphonePaymentId: id }
+                ]
+            },
             include: { tickets: true }
         });
 
-        // 3. Fallback to searching by PayPhone ID if provided and not found yet
-        if (!sale && id) {
-            sale = await prisma.sale.findFirst({
-                where: { payphonePaymentId: id },
-                include: { tickets: true }
-            });
-        }
-
         if (!sale) {
-            console.error(`[CONFIRM_API] Sale not found for: saleId=${saleId}, clientTxId=${clientTransactionId}, payphoneId=${id}`);
-            // Return 202 (Accepted/Pending) instead of 404 to avoid triggering releases/reversals on external systems
+            console.error(`[CONFIRM_API] Sale not found for identifiers: saleId=${saleId}, clientTxId=${clientTransactionId}, payphoneId=${id}`);
+            // Return 202 (Accepted/Pending) instead of 404 to avoid triggering reversals
             return NextResponse.json({ ok: true, status: "pending", message: "sale not found yet" }, { status: 202 });
         }
 

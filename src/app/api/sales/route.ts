@@ -117,7 +117,7 @@ export async function POST(request: Request) {
                 throw new Error('MANDATORY_SNAPSHOT:No se pudieron generar los números solicitados.');
             }
 
-            const sale = await tx.sale.create({
+            let sale = await tx.sale.create({
                 data: {
                     status: SaleStatus.PENDING,
                     amountCents: Math.round(Number(total) * 100),
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
 
             // Stabilize clientTransactionId (Law 0) - "Ideal: el mismo saleId"
             const clientTxId = sale.id;
-            await tx.sale.update({
+            sale = await tx.sale.update({
                 where: { id: sale.id },
                 data: { clientTransactionId: clientTxId }
             });
