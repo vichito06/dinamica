@@ -24,7 +24,7 @@ export async function confirmPayphonePayment(id: string | number, clientTransact
             method: 'POST',
             url: '/button/V2/Confirm',
             data: {
-                id: Number(id),
+                id: id,
                 clientTxId: clientTransactionId
             }
         }, 1, requestId);

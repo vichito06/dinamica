@@ -63,7 +63,7 @@ export async function POST(req: Request) {
                 method: 'POST',
                 url: '/button/V2/Confirm',
                 data: {
-                    id: Number(id),
+                    id: id,
                     clientTxId: sale.clientTransactionId
                 }
             });
