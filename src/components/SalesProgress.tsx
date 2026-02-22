@@ -6,10 +6,10 @@ export default function SalesProgress({ percent }: Props) {
     const safe = Math.min(100, Math.max(0, Number(percent) || 0));
 
     return (
-        <div className="mt-4 flex justify-center">
-            <div className="w-full max-w-md rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur">
+        <div className="mt-3 flex justify-center">
+            <div className="w-full max-w-xs rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur">
                 <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/70">Progreso</span>
+                    <span className="text-[11px] tracking-wider text-white/60">PROGRESO</span>
                     <span className="text-xs font-semibold text-white">{safe.toFixed(1)}%</span>
                 </div>
 
