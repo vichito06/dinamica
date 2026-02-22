@@ -3,14 +3,16 @@
 import { motion } from 'framer-motion';
 import { Sparkles, Trophy, DollarSign } from 'lucide-react';
 import Image from 'next/image';
+import SalesProgress from '@/components/SalesProgress';
 
 interface HeroProps {
     raffleTitle?: string;
     prizes?: { title: string, amount: string }[];
+    progress?: { total: number; vendido: number; porcentaje: number };
     onStartBuying?: () => void;
 }
 
-export default function Hero({ raffleTitle, prizes, onStartBuying }: HeroProps) {
+export default function Hero({ raffleTitle, prizes, progress, onStartBuying }: HeroProps) {
     const displayPrizes = (prizes && prizes.length > 0) ? prizes : [
         { title: "1er Premio", amount: "$1000" },
         { title: "2do Premio", amount: "$300" },
@@ -94,6 +96,20 @@ export default function Hero({ raffleTitle, prizes, onStartBuying }: HeroProps) 
                                 <span className="text-3xl md:text-4xl font-bold text-white">1 por número</span>
                             </div>
                         </motion.div>
+
+                        {/* Progress Bar - NEW PLACEMENT */}
+                        {progress && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.75 }}
+                                className="w-full"
+                            >
+                                <SalesProgress
+                                    percent={progress.porcentaje}
+                                />
+                            </motion.div>
+                        )}
 
                         {/* Prize Cards with MORE SPACING */}
                         <motion.div

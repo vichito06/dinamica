@@ -3,29 +3,28 @@ import { getSettings } from '@/lib/json-db';
 import HomeClient from '@/components/HomeClient';
 import LandingVisitTracker from '@/components/analytics/LandingVisitTracker';
 import { getActiveRaffleId } from '@/lib/raffle';
-import SalesProgress from '@/components/SalesProgress';
 
 export const dynamic = 'force-dynamic';
 
 async function getProgress() {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || 'https://yvossoeee.com';
     const res = await fetch(`${baseUrl}/api/public/progress`, {
       next: { revalidate: 30 },
     });
 
-    if (!res.ok) return { total: 0, sold: 0, percent: 0 };
+    if (!res.ok) return { total: 0, vendido: 0, porcentaje: 0 };
     return res.json();
   } catch (error) {
     console.error("[HOME] Error fetching progress:", error);
-    return { total: 0, sold: 0, percent: 0 };
+    return { total: 0, vendido: 0, porcentaje: 0 };
   }
 }
 
 export default async function Home() {
   const settings = await getSettings();
   const raffleId = await getActiveRaffleId();
-  const progress = await getProgress();
+  const progressData = await getProgress();
 
   return (
     <main className="min-h-screen dark">
@@ -37,15 +36,7 @@ export default async function Home() {
         </div>
       </div>
 
-      <div className="pt-24 pb-4">
-        <SalesProgress
-          sold={progress.sold}
-          total={progress.total}
-          percent={progress.percent}
-        />
-      </div>
-
-      <HomeClient settings={settings} />
+      <HomeClient settings={settings} progress={progressData} />
     </main>
   );
 }

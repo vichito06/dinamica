@@ -6,9 +6,10 @@ import NumberSelector from '@/components/NumberSelector';
 
 interface HomeClientProps {
     settings: any;
+    progress: { total: number; vendido: number; porcentaje: number };
 }
 
-export default function HomeClient({ settings }: HomeClientProps) {
+export default function HomeClient({ settings, progress }: HomeClientProps) {
     const selectionRef = useRef<HTMLDivElement>(null);
 
     const handleStartBuying = () => {
@@ -20,6 +21,7 @@ export default function HomeClient({ settings }: HomeClientProps) {
             <Hero
                 raffleTitle={settings.raffleTitle}
                 prizes={settings.prizes}
+                progress={progress}
                 onStartBuying={handleStartBuying}
             />
 
