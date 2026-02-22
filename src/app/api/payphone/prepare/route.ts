@@ -132,20 +132,20 @@ export async function POST(req: Request) {
         const cancelUrl = new URL("/checkout/cancel", origin);
         cancelUrl.searchParams.set("saleId", sale.id);
 
-        // Use a robust clientTransactionId
-        // [LAW 0] "Ideal: el mismo saleId"
-        const clientTransactionId = sale.clientTransactionId || sale.id;
+        // Use a robust clientTransactionId (MAX 16 chars for PayPhone compatibility)
+        // [LAW 0] "Ideal: el mismo saleId" -> truncated to last 16 if needed
+        let clientTransactionId = sale.clientTransactionId || sale.id;
+        if (clientTransactionId.length > 16) {
+            clientTransactionId = clientTransactionId.slice(-16);
+        }
 
         // Payload EXACTO requerido por PayPhone (Debe cumplir: amount = sum of others)
-        const payload = {
+        // [STABILITY] Omitimos campos en 0 para evitar errores de validación en el backend de PayPhone
+        const payload: any = {
             amount,
             amountWithoutTax,
-            amountWithTax,
-            tax,
-            service,
-            tip,
-            clientTransactionId,
             currency: "USD",
+            clientTransactionId,
             storeId: STORE_ID,
             reference: "Y Voss Oeee — Compra de tickets",
             responseUrl: returnUrl.toString(),
@@ -153,15 +153,21 @@ export async function POST(req: Request) {
             timeZone: -5,
         };
 
+        // Solo enviamos estos si son mayores a 0
+        if (amountWithTax > 0) payload.amountWithTax = amountWithTax;
+        if (tax > 0) payload.tax = tax;
+        if (service > 0) payload.service = service;
+        if (tip > 0) payload.tip = tip;
+
         // Admin override for testing
         if (isUserAdmin && body.testMode) {
             console.log("[PayPhone Prepare] Admin test mode detected");
         }
 
-        // Llamada a PayPhone usando Axios con reintentos
+        // Llamada a PayPhone usando Axios con reintentos (V2 PREPARE)
         const result = await payphoneRequestWithRetry({
             method: 'POST',
-            url: '/button/Prepare',
+            url: '/button/V2/Prepare',
             data: payload
         }, 2, requestId);
 
