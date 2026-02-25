@@ -23,7 +23,7 @@ export default function SalesProgress({ percent }: Props) {
 
             {/* Texto inferior */}
             <p className="mt-6 max-w-3xl text-center text-sm leading-relaxed text-white/80">
-                El sorteo se realizará una vez vendida la totalidad de los números, es decir, cuando la barra de progreso llegue al 100%. Se hará tomando los números de la primera y segunda suerte de la lot nacional.
+                El sorteo se realizará una vez vendida la totalidad de los números, es decir, cuando la barra de progreso llegue al 100%.
             </p>
         </div>
     );
