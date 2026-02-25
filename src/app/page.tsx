@@ -2,6 +2,7 @@ import Image from 'next/image';
 import { getSettings } from '@/lib/json-db';
 import HomeClient from '@/components/HomeClient';
 import LandingVisitTracker from '@/components/analytics/LandingVisitTracker';
+import LiveActivityToast from '@/components/LiveActivityToast';
 import { getActiveRaffleId } from '@/lib/raffle';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,7 @@ export default async function Home() {
       </div>
 
       <HomeClient settings={settings} progress={progressData} />
+      <LiveActivityToast />
     </main>
   );
 }
